@@ -1,0 +1,9 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="SourceProfile.xslt"?>
+<s0:SourceProfile xmlns:s0="http://SchemaSample.SourceProfile">
+  <Id>USR-1042</Id>
+  <FirstName>Jane</FirstName>
+  <LastName>Doe</LastName>
+  <BirthDate>1992-05-15</BirthDate>
+  <PostalCode>90210</PostalCode>
+</s0:SourceProfile>

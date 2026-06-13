@@ -1,0 +1,11 @@
+<ns0:DestinationUser xmlns:ns0="http://SchemaSample.DestinationUser">
+	<UserId>USR-1042</UserId>
+	<UserId_Plus_1000></UserId_Plus_1000>
+	<FullName>Jane Doe</FullName>
+	<Age>34</Age>
+	<Zip>90210</Zip>
+	<Zip_Firstname></Zip_Firstname>
+	<Age_Plus_10_Days></Age_Plus_10_Days>
+	<One_Plus_Two></One_Plus_Two>
+	<Ten_Into_Three></Ten_Into_Three>
+</ns0:DestinationUser>
