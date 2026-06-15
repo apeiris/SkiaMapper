@@ -1,4 +1,6 @@
 ﻿using System.Collections.Generic;
+using System.Xml.Serialization;
+using SkiaSharp;
 
 namespace SkiaMapper.Models {
     public class SchemaNode {
@@ -9,7 +11,10 @@ namespace SkiaMapper.Models {
         public List<SchemaNode> Children { get; set; } = new();
 
         // Layout Tracking for rendering/interaction coordinates
-        public float LastRenderY { get; set; }
-        public float Height { get; set; } = 24f;
+        [XmlIgnore]
+        public float LastRenderedY { get; set; }
+
+        [XmlIgnore]
+        public float LastRenderedHeight { get; set; } = 20f;
     }
 }
