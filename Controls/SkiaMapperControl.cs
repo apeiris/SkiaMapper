@@ -21,6 +21,9 @@ namespace SkiaMapper.Controls {
         private bool isDraggingPalette = false;
         private PointF paletteDragOffset;
 
+        private bool isPaletteExpanded = true;
+        private float expandedPaletteHeight = 420f; // Remembers its size when open
+
         // Drag-and-Drop / Interactive Link State Tracking
         private FunctoidDefinition? draggingPaletteFunctoid = null;
         private PointF paletteItemDragOffset;
@@ -189,6 +192,7 @@ namespace SkiaMapper.Controls {
             using var headerPaint = new SKPaint { Color = new SKColor(52, 73, 94), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var borderPaint = new SKPaint { Color = new SKColor(44, 62, 80), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
             using var titleTextPaint = new SKPaint { Color = SKColors.White, TextSize = 13f, IsAntialias = true, FakeBoldText = true };
+            using var toggleTextPaint = new SKPaint { Color = SKColors.White, TextSize = 14f, IsAntialias = true, TextAlign = SKTextAlign.Center };
 
             using var categoryBgPaint = new SKPaint { Color = new SKColor(215, 222, 233), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var categoryTextPaint = new SKPaint { Color = new SKColor(60, 70, 80), TextSize = 11f, IsAntialias = true, FakeBoldText = true };
@@ -199,56 +203,72 @@ namespace SkiaMapper.Controls {
 
             renderedItemHitboxes.Clear();
 
-            canvas.DrawRoundRect(paletteBounds, 6f, 6f, bodyPaint);
+            // 1. Adjust height boundary box if collapsed
+            float currentHeight = isPaletteExpanded ? expandedPaletteHeight : PaletteHeaderHeight;
+            paletteBounds = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + currentHeight);
 
+            // Draw Window Body background (only if open)
+            if (isPaletteExpanded) {
+                canvas.DrawRoundRect(paletteBounds, 6f, 6f, bodyPaint);
+            }
+
+            // 2. Draw Window Header
             var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
             canvas.DrawRoundRect(headerRect, 6f, 6f, headerPaint);
             canvas.DrawText("Functoid Toolbox", paletteBounds.Left + 12f, paletteBounds.Top + 21f, titleTextPaint);
 
-            float currentYOffset = paletteBounds.Top + PaletteHeaderHeight + 8f;
-            float leftPadding = paletteBounds.Left + 8f;
-            float itemWidth = paletteBounds.Width - 16f;
-            float itemHeight = 24f;
-            float categoryHeaderHeight = 22f;
+            // 3. Draw Collapse/Expand Toggle Button Glyph on the right edge
+            string toggleGlyph = isPaletteExpanded ? "▲" : "▼";
+            float toggleX = paletteBounds.Right - 20f;
+            float toggleY = paletteBounds.Top + 22f;
+            canvas.DrawText(toggleGlyph, toggleX, toggleY, toggleTextPaint);
 
-            foreach (var category in FunctoidCategories) {
-                if (currentYOffset + categoryHeaderHeight > paletteBounds.Bottom - 8f) break;
+            // 4. Render Contents (Skip completely if collapsed)
+            if (isPaletteExpanded) {
+                float currentYOffset = paletteBounds.Top + PaletteHeaderHeight + 8f;
+                float leftPadding = paletteBounds.Left + 8f;
+                float itemWidth = paletteBounds.Width - 16f;
+                float itemHeight = 24f;
+                float categoryHeaderHeight = 22f;
 
-                SKRect catHeaderRect = new SKRect(leftPadding, currentYOffset, leftPadding + itemWidth, currentYOffset + categoryHeaderHeight);
-                category.LastRenderedHeaderBounds = catHeaderRect;
+                foreach (var category in FunctoidCategories) {
+                    if (currentYOffset + categoryHeaderHeight > paletteBounds.Bottom - 8f) break;
 
-                canvas.DrawRoundRect(catHeaderRect, 3f, 3f, categoryBgPaint);
-                string arrowToken = category.IsExpanded ? "▼ " : "► ";
-                canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f, categoryTextPaint);
+                    SKRect catHeaderRect = new SKRect(leftPadding, currentYOffset, leftPadding + itemWidth, currentYOffset + categoryHeaderHeight);
+                    category.LastRenderedHeaderBounds = catHeaderRect;
 
-                currentYOffset += categoryHeaderHeight + 4f;
+                    canvas.DrawRoundRect(catHeaderRect, 3f, 3f, categoryBgPaint);
+                    string arrowToken = category.IsExpanded ? "▼ " : "► ";
+                    canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f, categoryTextPaint);
 
-                if (category.IsExpanded) {
-                    foreach (var functoid in AvailableFunctoids) {
-                        if (functoid.CategoryId != category.Id) continue;
+                    currentYOffset += categoryHeaderHeight + 4f;
 
-                        if (currentYOffset + itemHeight > paletteBounds.Bottom - 8f) break;
+                    if (category.IsExpanded) {
+                        foreach (var functoid in AvailableFunctoids) {
+                            if (functoid.CategoryId != category.Id) continue;
+                            if (currentYOffset + itemHeight > paletteBounds.Bottom - 8f) break;
 
-                        SKRect rowRect = new SKRect(leftPadding + 6f, currentYOffset, leftPadding + itemWidth - 6f, currentYOffset + itemHeight);
-                        renderedItemHitboxes[functoid] = rowRect;
+                            SKRect rowRect = new SKRect(leftPadding + 6f, currentYOffset, leftPadding + itemWidth - 6f, currentYOffset + itemHeight);
+                            renderedItemHitboxes[functoid] = rowRect;
 
-                        canvas.DrawRoundRect(rowRect, 3f, 3f, itemBoxPaint);
-                        canvas.DrawRoundRect(rowRect, 3f, 3f, itemBorderPaint);
+                            canvas.DrawRoundRect(rowRect, 3f, 3f, itemBoxPaint);
+                            canvas.DrawRoundRect(rowRect, 3f, 3f, itemBorderPaint);
 
-                        using var dotPaint = new SKPaint { Color = GetCategoryColor(category.Color), Style = SKPaintStyle.Fill, IsAntialias = true };
-                        canvas.DrawCircle(rowRect.Left + 12f, rowRect.MidY, 4f, dotPaint);
+                            using var dotPaint = new SKPaint { Color = GetCategoryColor(category.Color), Style = SKPaintStyle.Fill, IsAntialias = true };
+                            canvas.DrawCircle(rowRect.Left + 12f, rowRect.MidY, 4f, dotPaint);
 
-                        canvas.DrawText(functoid.Name, rowRect.Left + 24f, rowRect.Top + 16f, itemTextPaint);
+                            canvas.DrawText(functoid.Name, rowRect.Left + 24f, rowRect.Top + 16f, itemTextPaint);
 
-                        currentYOffset += itemHeight + 4f;
+                            currentYOffset += itemHeight + 4f;
+                        }
                     }
+                    currentYOffset += 6f;
                 }
-                currentYOffset += 6f;
             }
 
+            // Outer border outline
             canvas.DrawRoundRect(paletteBounds, 6f, 6f, borderPaint);
         }
-
         private SKColor GetCategoryColor(string colorName) {
             return colorName.ToLower() switch {
                 "lightblue" => new SKColor(135, 206, 250),
@@ -359,30 +379,42 @@ namespace SkiaMapper.Controls {
             float centerRight = Width - rightTreeWidth;
 
             // 1. Tool Palette Interactions Intercept
+            // Inside OnMouseDown, update Section 1:
             if (paletteBounds.Contains(e.X, e.Y)) {
                 var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
                 if (headerRect.Contains(e.X, e.Y)) {
+                    // Check if the click happened near the right edge (within 35 pixels of the end)
+                    if (e.X > paletteBounds.Right - 35f) {
+                        isPaletteExpanded = !isPaletteExpanded; // Toggle state!
+                        Invalidate();
+                        return;
+                    }
+
+                    // Otherwise, drag the palette window around as normal
                     isDraggingPalette = true;
                     paletteDragOffset = new PointF(e.X - paletteBounds.Left, e.Y - paletteBounds.Top);
                     Capture = true;
                     return;
                 }
 
-                foreach (var category in FunctoidCategories) {
-                    if (category.LastRenderedHeaderBounds.Contains(e.X, e.Y)) {
-                        category.IsExpanded = !category.IsExpanded;
-                        Invalidate();
-                        return;
+                // Only process category expanding or item dragging if the panel is open!
+                if (isPaletteExpanded) {
+                    foreach (var category in FunctoidCategories) {
+                        if (category.LastRenderedHeaderBounds.Contains(e.X, e.Y)) {
+                            category.IsExpanded = !category.IsExpanded;
+                            Invalidate();
+                            return;
+                        }
                     }
-                }
 
-                foreach (var itemEntry in renderedItemHitboxes) {
-                    if (itemEntry.Value.Contains(e.X, e.Y)) {
-                        draggingPaletteFunctoid = itemEntry.Key;
-                        paletteItemDragOffset = new PointF(55f, 18f);
-                        Capture = true;
-                        Invalidate();
-                        return;
+                    foreach (var itemEntry in renderedItemHitboxes) {
+                        if (itemEntry.Value.Contains(e.X, e.Y)) {
+                            draggingPaletteFunctoid = itemEntry.Key;
+                            paletteItemDragOffset = new PointF(55f, 18f);
+                            Capture = true;
+                            Invalidate();
+                            return;
+                        }
                     }
                 }
                 return;
