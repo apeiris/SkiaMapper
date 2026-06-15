@@ -1,11 +1,13 @@
-﻿using System;
+﻿using SkiaMapper.Models;
+using SkiaSharp;
+using SkiaSharp.Views.Desktop;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
-using SkiaSharp;
-using SkiaSharp.Views.Desktop;
-using SkiaMapper.Models;
+using System.Xml;
+using System.Xml.Serialization;
 
 namespace SkiaMapper.Controls {
     public class SkiaMapperControl : SKControl {
@@ -37,6 +39,14 @@ namespace SkiaMapper.Controls {
         private bool isResizingLeft = false;
         private bool isResizingRight = false;
         private PointF lastMousePos;
+
+        // Inside your metrics fields area
+        private SKRect saveBtnRect;
+        private SKRect loadBtnRect;
+        private SKRect clearBtnRect; 
+
+        private const float HeaderIconSize = 20f;
+
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public SchemaNode? SourceRoot { get; set; }
@@ -194,36 +204,72 @@ namespace SkiaMapper.Controls {
             using var titleTextPaint = new SKPaint { Color = SKColors.White, TextSize = 13f, IsAntialias = true, FakeBoldText = true };
             using var toggleTextPaint = new SKPaint { Color = SKColors.White, TextSize = 14f, IsAntialias = true, TextAlign = SKTextAlign.Center };
 
+            // Smooth vector icon brush properties
+            using var iconStrokePaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
+            using var iconFillPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
+
             using var categoryBgPaint = new SKPaint { Color = new SKColor(215, 222, 233), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var categoryTextPaint = new SKPaint { Color = new SKColor(60, 70, 80), TextSize = 11f, IsAntialias = true, FakeBoldText = true };
-
             using var itemBoxPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
             using var itemBorderPaint = new SKPaint { Color = new SKColor(195, 205, 215), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
             using var itemTextPaint = new SKPaint { Color = new SKColor(40, 40, 40), TextSize = 11f, IsAntialias = true };
 
             renderedItemHitboxes.Clear();
 
-            // 1. Adjust height boundary box if collapsed
+            // Adjust height boundary box if collapsed
             float currentHeight = isPaletteExpanded ? expandedPaletteHeight : PaletteHeaderHeight;
             paletteBounds = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + currentHeight);
 
-            // Draw Window Body background (only if open)
             if (isPaletteExpanded) {
                 canvas.DrawRoundRect(paletteBounds, 6f, 6f, bodyPaint);
             }
 
-            // 2. Draw Window Header
+            // Draw Window Header
             var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
             canvas.DrawRoundRect(headerRect, 6f, 6f, headerPaint);
             canvas.DrawText("Functoid Toolbox", paletteBounds.Left + 12f, paletteBounds.Top + 21f, titleTextPaint);
 
-            // 3. Draw Collapse/Expand Toggle Button Glyph on the right edge
-            string toggleGlyph = isPaletteExpanded ? "▲" : "▼";
-            float toggleX = paletteBounds.Right - 20f;
-            float toggleY = paletteBounds.Top + 22f;
-            canvas.DrawText(toggleGlyph, toggleX, toggleY, toggleTextPaint);
+            // --- CALCULATE HEADER BUTTON SLOTS (Right-Aligned) ---
+            float rightEdge = paletteBounds.Right - 12f;
+            float headerCenterY = paletteBounds.Top + (PaletteHeaderHeight / 2f);
 
-            // 4. Render Contents (Skip completely if collapsed)
+            // 1. Collapse/Expand Toggle Slot
+            float toggleX = rightEdge - 8f;
+            string toggleGlyph = isPaletteExpanded ? "▲" : "▼";
+            canvas.DrawText(toggleGlyph, toggleX, paletteBounds.Top + 22f, toggleTextPaint);
+
+            // 2. Save Button Slot (Floppy Disk Shape)
+            float saveCenterX = rightEdge - 42f;
+            saveBtnRect = new SKRect(saveCenterX - 10f, headerCenterY - 10f, saveCenterX + 10f, headerCenterY + 10f);
+            canvas.DrawRect(saveBtnRect, iconStrokePaint);
+            canvas.DrawRect(new SKRect(saveCenterX - 5f, saveBtnRect.Top, saveCenterX + 5f, saveBtnRect.Top + 6f), iconFillPaint);
+            canvas.DrawRect(new SKRect(saveCenterX - 4f, saveBtnRect.Bottom - 6f, saveCenterX + 4f, saveBtnRect.Bottom), iconStrokePaint);
+
+            // 3. Load Button Slot (Folder Shape)
+            float loadCenterX = rightEdge - 72f;
+            loadBtnRect = new SKRect(loadCenterX - 11f, headerCenterY - 8f, loadCenterX + 11f, headerCenterY + 8f);
+            using var folderPath = new SKPath();
+            folderPath.MoveTo(loadBtnRect.Left, loadBtnRect.Bottom);
+            folderPath.LineTo(loadBtnRect.Left, loadBtnRect.Top);
+            folderPath.LineTo(loadBtnRect.Left + 7f, loadBtnRect.Top);
+            folderPath.LineTo(loadBtnRect.Left + 11f, loadBtnRect.Top + 4f);
+            folderPath.LineTo(loadBtnRect.Right, loadBtnRect.Top + 4f);
+            folderPath.LineTo(loadBtnRect.Right, loadBtnRect.Bottom);
+            folderPath.Close();
+            canvas.DrawPath(folderPath, iconStrokePaint);
+
+            // 4. Clear Canvas Button Slot (Trash Can Shape)
+            float clearCenterX = rightEdge - 102f;
+            clearBtnRect = new SKRect(clearCenterX - 9f, headerCenterY - 9f, clearCenterX + 9f, headerCenterY + 9f);
+
+            // Draw Trash Can base bucket
+            canvas.DrawRect(new SKRect(clearBtnRect.Left + 2f, clearBtnRect.Top + 4f, clearBtnRect.Right - 2f, clearBtnRect.Bottom), iconStrokePaint);
+            // Draw Trash Can lid brim line
+            canvas.DrawLine(clearBtnRect.Left, clearBtnRect.Top + 3f, clearBtnRect.Right, clearBtnRect.Top + 3f, iconStrokePaint);
+            // Draw Trash Can lid top handle
+            canvas.DrawRect(new SKRect(clearCenterX - 3f, clearBtnRect.Top, clearCenterX + 3f, clearBtnRect.Top + 3f), iconStrokePaint);
+
+            // Render Contents (Skip completely if collapsed)
             if (isPaletteExpanded) {
                 float currentYOffset = paletteBounds.Top + PaletteHeaderHeight + 8f;
                 float leftPadding = paletteBounds.Left + 8f;
@@ -266,7 +312,6 @@ namespace SkiaMapper.Controls {
                 }
             }
 
-            // Outer border outline
             canvas.DrawRoundRect(paletteBounds, 6f, 6f, borderPaint);
         }
         private SKColor GetCategoryColor(string colorName) {
@@ -379,25 +424,66 @@ namespace SkiaMapper.Controls {
             float centerRight = Width - rightTreeWidth;
 
             // 1. Tool Palette Interactions Intercept
-            // Inside OnMouseDown, update Section 1:
             if (paletteBounds.Contains(e.X, e.Y)) {
                 var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
                 if (headerRect.Contains(e.X, e.Y)) {
-                    // Check if the click happened near the right edge (within 35 pixels of the end)
-                    if (e.X > paletteBounds.Right - 35f) {
-                        isPaletteExpanded = !isPaletteExpanded; // Toggle state!
+                    // CLICK TRAP: Clear Canvas Workspace Button (PRIORITIZED)
+                    if (clearBtnRect.Contains(e.X, e.Y)) {
+                        var choice = MessageBox.Show(
+                            "Are you sure you want to completely clear the canvas? All functoids and mapping traces will be deleted.",
+                            "Clear Canvas",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Warning
+                        );
+
+                        if (choice == DialogResult.Yes) {
+                            ActiveFunctoids.Clear();
+                            Connections.Clear();
+
+                            // Reset dragging/active states safely
+                            dragSource = null;
+                            draggingCanvasInstance = null;
+
+                            Invalidate(); // Refresh layout immediately
+                        }
+                        return;
+                    }
+
+                    // CLICK TRAP: Save Config File Button
+                    if (saveBtnRect.Contains(e.X, e.Y)) {
+                        using var sfd = new SaveFileDialog { Filter = "XML Files|*.xml", Title = "Save Mapping Schema" };
+                        if (sfd.ShowDialog() == DialogResult.OK) {
+                            string xmlData = SaveConfiguration();
+                            File.WriteAllText(sfd.FileName, xmlData);
+                        }
+                        return;
+                    }
+
+                    // CLICK TRAP: Load Config File Button
+                    if (loadBtnRect.Contains(e.X, e.Y)) {
+                        using var ofd = new OpenFileDialog { Filter = "XML Files|*.xml", Title = "Load Mapping Schema" };
+                        if (ofd.ShowDialog() == DialogResult.OK) {
+                            string xmlData = File.ReadAllText(ofd.FileName);
+                            LoadConfiguration(xmlData);
+                        }
+                        return;
+                    }
+
+                    // CLICK TRAP: Collapse Toggle Arrow Box
+                    if (e.X > paletteBounds.Right - 28f) {
+                        isPaletteExpanded = !isPaletteExpanded;
                         Invalidate();
                         return;
                     }
 
-                    // Otherwise, drag the palette window around as normal
+                    // Default Header Action: Move/Drag window palette around canvas
                     isDraggingPalette = true;
                     paletteDragOffset = new PointF(e.X - paletteBounds.Left, e.Y - paletteBounds.Top);
                     Capture = true;
                     return;
                 }
 
-                // Only process category expanding or item dragging if the panel is open!
+                // Only process category expanding or item dragging if open
                 if (isPaletteExpanded) {
                     foreach (var category in FunctoidCategories) {
                         if (category.LastRenderedHeaderBounds.Contains(e.X, e.Y)) {
@@ -431,7 +517,7 @@ namespace SkiaMapper.Controls {
                         // Clicked Right Half: Initiate a valid downstream output connection wire trace
                         if (e.X > itemRect.MidX) {
                             dragSource = new ConnectionEndpoint {
-                                Type = ConnectionEndpointType.Functoid, // Aligned with your MappingProject.cs enum
+                                Type = ConnectionEndpointType.Functoid,
                                 FunctoidInstanceId = instance.Id
                             };
                             currentDragPoint = new PointF(itemRect.Right, itemRect.MidY);
@@ -626,5 +712,62 @@ namespace SkiaMapper.Controls {
             Capture = false;
             Invalidate();
         }
+        /// <summary>
+        /// Serializes the active canvas functoids and wire links into an XML string.
+        /// </summary>
+        public string SaveConfiguration() {
+            var state = new MappingProjectState {
+                ActiveFunctoids = this.ActiveFunctoids,
+                Connections = this.Connections
+            };
+
+            var serializer = new XmlSerializer(typeof(MappingProjectState));
+            using var stringWriter = new StringWriter();
+            using var xmlWriter = XmlWriter.Create(stringWriter, new XmlWriterSettings { Indent = true });
+
+            serializer.Serialize(xmlWriter, state);
+            return stringWriter.ToString();
+        }
+
+        /// <summary>
+        /// Deserializes an XML map configuration string and completely rehydrates the canvas layout.
+        /// </summary>
+        public void LoadConfiguration(string xmlContent) {
+            if (string.IsNullOrWhiteSpace(xmlContent)) return;
+
+            try {
+                var serializer = new XmlSerializer(typeof(MappingProjectState));
+                using var stringReader = new StringReader(xmlContent);
+
+                if (serializer.Deserialize(stringReader) is MappingProjectState loadedState) {
+                    // Clear existing layout records
+                    this.ActiveFunctoids.Clear();
+                    this.Connections.Clear();
+
+                    // Rehydrate collections
+                    if (loadedState.ActiveFunctoids != null) {
+                        this.ActiveFunctoids.AddRange(loadedState.ActiveFunctoids);
+                    }
+
+                    if (loadedState.Connections != null) {
+                        // Rehydrate the input index lookup safety map
+                        foreach (var conn in loadedState.Connections) {
+                            if (conn.Target != null) {
+                                // Sync our InputIndex property helper back to ArgumentIndex
+                                conn.Target.InputIndex = conn.Target.ArgumentIndex;
+                            }
+                        }
+                        this.Connections.AddRange(loadedState.Connections);
+                    }
+
+                    // Force SkiaSharp to repaint the newly hydrated layout elements immediately
+                    this.Invalidate();
+                }
+            } catch (Exception ex) {
+                System.Diagnostics.Debug.WriteLine($"[REHYDRATE ERROR] Failed to load layout map XML: {ex.Message}");
+                throw;
+            }
+        }
+
     }
 }
