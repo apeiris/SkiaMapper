@@ -243,6 +243,20 @@ namespace SkiaMapper.Controls {
 
                 // 5. Draw Descriptive Label
                 canvas.DrawText(functoid.Definition.Name, rect.MidX + (hasAccent ? 2.5f : 0f), rect.MidY + 4f, textPaint);
+
+                // 6. INDICATOR ONLY: Draw a simple red dot in the top-right corner if custom
+                bool isScriptCustomized = functoid.Definition != null &&
+                                          !string.IsNullOrEmpty(functoid.CustomScriptBody) &&
+                                          functoid.CustomScriptBody.Trim() != functoid.Definition.ScriptTemplate?.Trim();
+
+                if (isScriptCustomized) {
+                    float dotRadius = 3.5f;
+                    float dotX = rect.Right - 6f;
+                    float dotY = rect.Top + 6f;
+
+                    using var redDotPaint = new SKPaint { Color = SKColors.Red, Style = SKPaintStyle.Fill, IsAntialias = true };
+                    canvas.DrawCircle(dotX, dotY, dotRadius, redDotPaint);
+                }
             }
         }
         private void RenderFunctoidToolPalette(SKCanvas canvas) {
@@ -496,10 +510,15 @@ namespace SkiaMapper.Controls {
                         }
                         return;
                     }
-
                     // CLICK TRAP: Save Config File Button
                     if (saveBtnRect.Contains(e.X, e.Y)) {
-                        using var sfd = new SaveFileDialog { Filter = "XML Files|*.xml", Title = "Save Mapping Schema" };
+                        using var sfd = new SaveFileDialog {
+                            Filter = "XML Files (*.xml)|*.xml",
+                            DefaultExt = "xml",
+                            AddExtension = true,
+                            Title = "Save Mapping Schema"
+                        };
+
                         if (sfd.ShowDialog() == DialogResult.OK) {
                             string xmlData = SaveConfiguration();
                             File.WriteAllText(sfd.FileName, xmlData);
@@ -509,7 +528,12 @@ namespace SkiaMapper.Controls {
 
                     // CLICK TRAP: Load Config File Button
                     if (loadBtnRect.Contains(e.X, e.Y)) {
-                        using var ofd = new OpenFileDialog { Filter = "XML Files|*.xml", Title = "Load Mapping Schema" };
+                        using var ofd = new OpenFileDialog {
+                            Filter = "XML Files (*.xml)|*.xml",
+                            DefaultExt = "xml",
+                            Title = "Load Mapping Schema"
+                        };
+
                         if (ofd.ShowDialog() == DialogResult.OK) {
                             string xmlData = File.ReadAllText(ofd.FileName);
                             LoadConfiguration(xmlData);
@@ -607,13 +631,19 @@ namespace SkiaMapper.Controls {
             }
             #endregion 3
             #region 4 Component Layout Splitters Sizing Slices
-            if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) isResizingLog = true;
-            else if (Math.Abs(e.X - leftTreeWidth) < SplitterWidth) isResizingLeft = true;
-            else if (Math.Abs(e.X - (Width - rightTreeWidth)) < SplitterWidth) isResizingRight = true;
-
-            Capture = true;
+            if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) {
+                isResizingLog = true;
+                Capture = true;
+            } else if (Math.Abs(e.X - leftTreeWidth) < SplitterWidth) {
+                isResizingLeft = true;
+                Capture = true;
+            } else if (Math.Abs(e.X - centerRight) < SplitterWidth) {
+                isResizingRight = true;
+                Capture = true;
+            }
             #endregion 4
         }
+      
         protected override void OnMouseMove(MouseEventArgs e) {
             lastMousePos = new PointF(e.X, e.Y);
             float centerLeft = leftTreeWidth;
