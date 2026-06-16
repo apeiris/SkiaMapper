@@ -183,20 +183,52 @@ namespace SkiaMapper.Controls {
         }
 
         private void RenderActiveGridFunctoids(SKCanvas canvas, float canvasLeftOffset) {
-            using var boxPaint = new SKPaint { Color = SKColors.LightSkyBlue, Style = SKPaintStyle.Fill, IsAntialias = true };
-            using var borderPaint = new SKPaint { Color = SKColors.SteelBlue, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
-            using var textPaint = new SKPaint { Color = SKColors.Black, TextSize = 12f, IsAntialias = true, TextAlign = SKTextAlign.Center };
+            using var borderPaint = new SKPaint { Color = new SKColor(170, 185, 200), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+            using var textPaint = new SKPaint { Color = new SKColor(45, 55, 65), TextSize = 11f, IsAntialias = true, FakeBoldText = true, TextAlign = SKTextAlign.Center };
+            using var pinPaint = new SKPaint { Color = new SKColor(130, 140, 150), Style = SKPaintStyle.Fill, IsAntialias = true };
 
             foreach (var functoid in ActiveFunctoids) {
                 float absoluteX = canvasLeftOffset + functoid.X;
                 SKRect rect = new SKRect(absoluteX, functoid.Y, absoluteX + functoid.Width, functoid.Y + functoid.Height);
 
-                canvas.DrawRoundRect(rect, 4f, 4f, boxPaint);
+                // 1. Resolve Dynamic Category Identity Color Tint
+                SKColor nodeFillColor = new SKColor(235, 240, 248); // High-contrast neutral safe fallback
+                SKColor accentColor = SKColors.LightGray;
+                bool hasAccent = false;
+
+                if (functoid.Definition != null) {
+                    var category = FunctoidCategories.Find(c => c.Id == functoid.Definition.CategoryId);
+                    if (category != null) {
+                        accentColor = GetCategoryColor(category.Color);
+                        // Apply a transparent alpha alpha blend (40 out of 255) for the block body 
+                        // to maintain crisp text legibility against dark category definitions
+                        nodeFillColor = new SKColor(accentColor.Red, accentColor.Green, accentColor.Blue, 40);
+                        hasAccent = true;
+                    }
+                }
+
+                // 2. Render Node Base Container 
+                using var dynamicBoxPaint = new SKPaint { Color = nodeFillColor, Style = SKPaintStyle.Fill, IsAntialias = true };
+                canvas.DrawRoundRect(rect, 4f, 4f, dynamicBoxPaint);
                 canvas.DrawRoundRect(rect, 4f, 4f, borderPaint);
-                canvas.DrawText(functoid.Definition.Name, rect.MidX, rect.MidY + 4f, textPaint);
+
+                // 3. Render Solid Category Accent Strip (Left Side Frame Flag)
+                if (hasAccent) {
+                    using var accentPaint = new SKPaint { Color = accentColor, Style = SKPaintStyle.Fill, IsAntialias = true };
+                    SKRect accentStrip = new SKRect(rect.Left, rect.Top, rect.Left + 5f, rect.Bottom);
+                    canvas.DrawRoundRect(accentStrip, 4f, 4f, accentPaint);
+                    // Squaring out the inside corners of our accent bar frame safely
+                    canvas.DrawRect(new SKRect(rect.Left + 3f, rect.Top, rect.Left + 5f, rect.Bottom), accentPaint);
+                }
+
+                // 4. Draw Input/Output Handle Vector Nubs
+                canvas.DrawCircle(rect.Left, rect.MidY, 4f, pinPaint);
+                canvas.DrawCircle(rect.Right, rect.MidY, 4f, pinPaint);
+
+                // 5. Draw Descriptive Label
+                canvas.DrawText(functoid.Definition.Name, rect.MidX + (hasAccent ? 2.5f : 0f), rect.MidY + 4f, textPaint);
             }
         }
-
         private void RenderFunctoidToolPalette(SKCanvas canvas) {
             using var bodyPaint = new SKPaint { Color = new SKColor(240, 243, 248), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var headerPaint = new SKPaint { Color = new SKColor(52, 73, 94), Style = SKPaintStyle.Fill, IsAntialias = true };
@@ -635,111 +667,101 @@ namespace SkiaMapper.Controls {
         }
 
         protected override void OnMouseUp(MouseEventArgs e) {
-            // 1. Release active canvas dragging tracking state safely
-            if (draggingCanvasInstance != null) {
-                draggingCanvasInstance = null;
-                Capture = false;
-                Invalidate();
-                return;
-            }
+            float centerLeft = leftTreeWidth;
+            float centerRight = Width - rightTreeWidth;
+            float mainContentHeight = Height - logPanelHeight;
 
-            // 2. Handle dropping a new toolbox item onto the central canvas grid
+            // --- 1. PALETTE DROP HANDLER: Add new Functoid to Workspace Canvas ---
             if (draggingPaletteFunctoid != null) {
-                float centerLeft = leftTreeWidth;
-                float centerRight = Width - rightTreeWidth;
-                float mainContentHeight = Height - logPanelHeight;
-
+                // Verify the drop point landed inside the central canvas grid bounds
                 if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
-                    float targetCanvasX = (e.X - centerLeft) - paletteItemDragOffset.X;
-                    float targetCanvasY = e.Y - paletteItemDragOffset.Y;
 
-                    ActiveFunctoids.Add(new FunctoidInstance {
+                    // Calculate coordinates relative to the central canvas origin context
+                    float localX = (e.X - centerLeft) - paletteItemDragOffset.X;
+                    float localY = e.Y - paletteItemDragOffset.Y;
+
+                    // Restrict bounds so dropped items don't bleed beneath layout bars
+                    if (localX < 0) localX = 0;
+                    if (localX + 110f > (centerRight - centerLeft)) localX = (centerRight - centerLeft) - 110f;
+                    if (localY < 0) localY = 0;
+                    if (localY + 36f > mainContentHeight) localY = mainContentHeight - 36f;
+
+                    // Instantiate a completely fresh object to append to our collection stream
+                    var newInstance = new FunctoidInstance {
                         Id = Guid.NewGuid(),
-                        Definition = draggingPaletteFunctoid,
-                        X = targetCanvasX,
-                        Y = targetCanvasY,
+                        X = localX,
+                        Y = localY,
                         Width = 110f,
-                        Height = 36f
-                    });
+                        Height = 36f,
+                        Definition = draggingPaletteFunctoid
+                    };
+
+                    ActiveFunctoids.Add(newInstance);
                 }
+
                 draggingPaletteFunctoid = null;
                 Capture = false;
                 Invalidate();
-                return;
+                return; // Early break out so we don't accidentally check connection line logic
             }
 
-            isDraggingPalette = isResizingLog = isResizingLeft = isResizingRight = false;
-
-            // 3. HANDLE LINE DROPS WITH VALIDATION
+            // --- 2. MAP CONNECTION TRACE WIRE HANDLER ---
             if (dragSource != null) {
-                float centerLeft = leftTreeWidth;
-                float centerRight = Width - rightTreeWidth;
-                float mainContentHeight = Height - logPanelHeight;
+                ConnectionEndpoint? dragTarget = null;
 
-                // Case A: Dropped inside the central canvas (Targeting a Functoid Input Slot)
-                if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
-                    FunctoidInstance? targetFunctoid = null;
-                    bool droppedOnRightHalf = false;
-
+                // EVALUATE TARGET: Dropped onto a Destination Tree Node?
+                if (e.X > centerRight && e.Y < mainContentHeight && DestinationRoot != null) {
+                    SchemaNode? targetedNode = FindDestinationNodeAtPosition(DestinationRoot, e.Y);
+                    if (targetedNode != null) {
+                        dragTarget = new ConnectionEndpoint {
+                            Type = ConnectionEndpointType.DestinationNode,
+                            NodePath = targetedNode.Name
+                        };
+                    }
+                }
+                // EVALUATE TARGET: Dropped onto a Canvas Functoid?
+                else if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
                     foreach (var instance in ActiveFunctoids) {
                         float absoluteX = centerLeft + instance.X;
                         SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
-                        if (itemRect.Contains(e.X, e.Y)) {
-                            targetFunctoid = instance;
-                            if (e.X > itemRect.MidX) droppedOnRightHalf = true;
+
+                        // Clicking/releasing on the left half represents an Input connection
+                        if (itemRect.Contains(e.X, e.Y) && e.X <= itemRect.MidX) {
+                            dragTarget = new ConnectionEndpoint {
+                                Type = ConnectionEndpointType.Functoid,
+                                FunctoidInstanceId = instance.Id
+                            };
                             break;
                         }
                     }
+                }
 
-                    if (targetFunctoid != null) {
-                        // RULE 1: Direct validation blocking dropping anything on the RIGHT half (Output)
-                        if (droppedOnRightHalf) {
-                            System.Diagnostics.Debug.WriteLine("[VALIDATION] Rejected: Cannot wire lines into an output slot.");
-                            dragSource = null;
-                            Capture = false;
-                            Invalidate();
-                            return;
-                        }
+                // VALIDATE AND COMMIT CONNECTION
+                if (dragTarget != null) {
+                    bool isSelfLoop = dragSource.Type == ConnectionEndpointType.Functoid &&
+                                      dragTarget.Type == ConnectionEndpointType.Functoid &&
+                                      dragSource.FunctoidInstanceId == dragTarget.FunctoidInstanceId;
 
-                        // RULE 2: No Self-Looping (Functoid connecting its own output to its own input)
-                        if (dragSource.Type == ConnectionEndpointType.Functoid && dragSource.FunctoidInstanceId == targetFunctoid.Id) {
-                            System.Diagnostics.Debug.WriteLine("[VALIDATION] Rejected: A functoid cannot connect to itself.");
-                            dragSource = null;
-                            Capture = false;
-                            Invalidate();
-                            return;
-                        }
-
-                        // Everything is valid! Save the connection into the target input slot (Index 0)
+                    if (!isSelfLoop) {
+                        // Multi-connection constraint lifted: we bypass duplication filters entirely
                         Connections.Add(new MappingConnection {
                             Source = dragSource,
-                            Target = new ConnectionEndpoint {
-                                Type = ConnectionEndpointType.Functoid,
-                                FunctoidInstanceId = targetFunctoid.Id,
-                                ArgumentIndex = 0
-                            }
+                            Target = dragTarget
                         });
                     }
                 }
-                // Case B: Dropped inside the Right Tree Panel (Targeting a Destination Node)
-                else if (e.X > centerRight && DestinationRoot != null) {
-                    // RULE 3: Ensure Source tree nodes can't hop straight to destination trees if that's a restriction you want,
-                    // or simply guarantee that we are dragging valid sources here.
-                    SchemaNode? targetedDestNode = FindDestinationNodeAtPosition(DestinationRoot, e.Y);
-                    if (targetedDestNode != null) {
-                        Connections.Add(new MappingConnection {
-                            Source = dragSource,
-                            Target = new ConnectionEndpoint {
-                                Type = ConnectionEndpointType.DestinationNode,
-                                NodePath = targetedDestNode.Name
-                            }
-                        });
-                    }
-                }
+
                 dragSource = null;
+                Capture = false;
+                Invalidate();
             }
-            Capture = false;
-            Invalidate();
+
+            // --- 3. RESET MISCELLANEOUS RESIZE TRACKERS ---
+            draggingCanvasInstance = null;
+            isDraggingPalette = false;
+            isResizingLog = false;
+            isResizingLeft = false;
+            isResizingRight = false;
         }
         /// <summary>
         /// Serializes the active canvas functoids and wire links into an XML string.
