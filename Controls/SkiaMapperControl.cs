@@ -563,6 +563,7 @@ namespace SkiaMapper.Controls {
             float centerRight = Width - rightTreeWidth;
             float mainContentHeight = Height - logPanelHeight;
 
+            // 1. Handle Active Component Dragging Layouts
             if (draggingCanvasInstance != null) {
                 float proposedCanvasX = (e.X - centerLeft) - canvasInstanceDragOffset.X;
                 float proposedCanvasY = e.Y - canvasInstanceDragOffset.Y;
@@ -586,6 +587,7 @@ namespace SkiaMapper.Controls {
             }
 
             if (isDraggingPalette) {
+                Cursor = Cursors.SizeAll;
                 float width = paletteBounds.Width;
                 float height = paletteBounds.Height;
                 float newLeft = e.X - paletteDragOffset.X;
@@ -596,13 +598,40 @@ namespace SkiaMapper.Controls {
                 return;
             }
 
-            if (isResizingLog) { logPanelHeight = Height - e.Y; Invalidate(); } else if (isResizingLeft) { leftTreeWidth = e.X; Invalidate(); } else if (isResizingRight) { rightTreeWidth = Width - e.X; Invalidate(); }
+            if (isResizingLog) {
+                logPanelHeight = Height - e.Y;
+                Invalidate();
+                return;
+            } else if (isResizingLeft) {
+                leftTreeWidth = e.X;
+                Invalidate();
+                return;
+            } else if (isResizingRight) {
+                rightTreeWidth = Width - e.X;
+                Invalidate();
+                return;
+            }
 
+            // 2. Evaluate Dynamic Hover Cursor Styles
             var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
-            if (headerRect.Contains(e.X, e.Y)) Cursor = Cursors.SizeAll;
-            else if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) Cursor = Cursors.HSplit;
-            else if (Math.Abs(e.X - leftTreeWidth) < SplitterWidth || Math.Abs(e.X - (Width - rightTreeWidth)) < SplitterWidth) Cursor = Cursors.VSplit;
-            else Cursor = Cursors.Default;
+
+            if (headerRect.Contains(e.X, e.Y)) {
+                // HOVER OVERRIDE: If over utility buttons or the collapse toggle region, use normal pointer
+                if (clearBtnRect.Contains(e.X, e.Y) ||
+                    loadBtnRect.Contains(e.X, e.Y) ||
+                    saveBtnRect.Contains(e.X, e.Y) ||
+                    e.X > paletteBounds.Right - 28f) {
+                    Cursor = Cursors.Default;
+                } else {
+                    Cursor = Cursors.SizeAll; // Dragging space for the title block window
+                }
+            } else if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) {
+                Cursor = Cursors.HSplit;
+            } else if (Math.Abs(e.X - leftTreeWidth) < SplitterWidth || Math.Abs(e.X - (Width - rightTreeWidth)) < SplitterWidth) {
+                Cursor = Cursors.VSplit;
+            } else {
+                Cursor = Cursors.Default;
+            }
         }
 
         protected override void OnMouseUp(MouseEventArgs e) {
