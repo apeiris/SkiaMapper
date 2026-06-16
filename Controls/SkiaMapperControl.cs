@@ -46,7 +46,8 @@ namespace SkiaMapper.Controls {
         private SKRect clearBtnRect; 
 
         private const float HeaderIconSize = 20f;
-
+        private ContextMenuStrip functoidContextMenu;
+        private FunctoidInstance? contextTargetInstance = null;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public SchemaNode? SourceRoot { get; set; }
@@ -72,6 +73,21 @@ namespace SkiaMapper.Controls {
         public SkiaMapperControl() {
             this.DoubleBuffered = true;
             this.Dock = DockStyle.Fill;
+            // Initialize Context Menu Structures smoothly
+            functoidContextMenu = new ContextMenuStrip();
+            var editScriptItem = new ToolStripMenuItem("Configure Script Block...");
+            editScriptItem.Click += EditScriptItem_Click;
+            functoidContextMenu.Items.Add(editScriptItem);
+        }
+            private void EditScriptItem_Click(object? sender, EventArgs e) {
+            if (contextTargetInstance != null) {
+                using var editor = new Forms.ScriptEditorDialog(contextTargetInstance);
+                if (editor.ShowDialog() == DialogResult.OK) {
+                    // Script property allocations saved cleanly inside modal context
+                    Invalidate();
+                }
+            }
+        
         }
 
         protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
@@ -455,7 +471,7 @@ namespace SkiaMapper.Controls {
             float centerLeft = leftTreeWidth;
             float centerRight = Width - rightTreeWidth;
 
-            // 1. Tool Palette Interactions Intercept
+            #region  1. Tool Palette Interactions Intercept
             if (paletteBounds.Contains(e.X, e.Y)) {
                 var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
                 if (headerRect.Contains(e.X, e.Y)) {
@@ -537,7 +553,8 @@ namespace SkiaMapper.Controls {
                 }
                 return;
             }
-
+            #endregion 1. Tool Palette Interactions Intercept
+            #region 2 Canvas Functoid Click Intercept
             // 2. Existing Canvas Functoid Click Intercept
             if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
                 for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
@@ -546,6 +563,13 @@ namespace SkiaMapper.Controls {
                     SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
 
                     if (itemRect.Contains(e.X, e.Y)) {
+                        // RIGHT-CLICK MENU TRAP HERE:
+                        if (e.Button == MouseButtons.Right) {
+                            contextTargetInstance = instance;
+                            functoidContextMenu.Show(this, e.Location);
+                            return; // Suppress dragging routines instantly
+                        }
+
                         // Clicked Right Half: Initiate a valid downstream output connection wire trace
                         if (e.X > itemRect.MidX) {
                             dragSource = new ConnectionEndpoint {
@@ -566,8 +590,8 @@ namespace SkiaMapper.Controls {
                     }
                 }
             }
-
-            // 3. Source Node Linking Line Selection Intercept
+            #endregion 2
+            #region 3. Source Node Linking Line Selection Intercept
             if (e.X < leftTreeWidth && e.Y < mainContentHeight && SourceRoot != null) {
                 SchemaNode? targetedNode = FindNodeAtPosition(SourceRoot, e.Y);
                 if (targetedNode != null) {
@@ -581,13 +605,14 @@ namespace SkiaMapper.Controls {
                     return;
                 }
             }
-
-            // 4. Component Layout Splitters Sizing Slices
+            #endregion 3
+            #region 4 Component Layout Splitters Sizing Slices
             if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) isResizingLog = true;
             else if (Math.Abs(e.X - leftTreeWidth) < SplitterWidth) isResizingLeft = true;
             else if (Math.Abs(e.X - (Width - rightTreeWidth)) < SplitterWidth) isResizingRight = true;
 
             Capture = true;
+            #endregion 4
         }
         protected override void OnMouseMove(MouseEventArgs e) {
             lastMousePos = new PointF(e.X, e.Y);
@@ -665,6 +690,63 @@ namespace SkiaMapper.Controls {
                 Cursor = Cursors.Default;
             }
         }
+        private static string BuildDefaultScriptFromBodyTemplate(FunctoidDefinition def, string methodName) {
+            if (string.IsNullOrWhiteSpace(def.ScriptTemplate)) {
+                return $"public object {methodName}(params object[] args) \r\n{{\r\n    return null;\r\n}}";
+            }
+
+            // Check if the script template is already a full method signature definition
+            if (def.ScriptTemplate.Contains("public ") || def.ScriptTemplate.Contains("private ")) {
+                return def.ScriptTemplate;
+            }
+
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"public object {methodName}(object param0, object param1 = null, object param2 = null)");
+            sb.AppendLine("{");
+
+            // Process formatting variables or simple joining symbols safely
+            if (!string.IsNullOrWhiteSpace(def.JoinOperator)) {
+                sb.AppendLine($"    var parts = new[] {{ param0, param1, param2 }}.Where(p => p != null).Select(p => p.ToString());");
+                sb.AppendLine($"    return string.Join(\"{def.JoinOperator}\", parts);");
+            } else {
+                // CRITICAL FIX: Safe token replacement that doesn't blow up if {1} or {2} are missing
+                string processedTemplate = def.ScriptTemplate;
+                processedTemplate = processedTemplate.Replace("{0}", "param0");
+                processedTemplate = processedTemplate.Replace("{1}", "param1");
+                processedTemplate = processedTemplate.Replace("{2}", "param2");
+
+                sb.AppendLine($"    {processedTemplate}");
+            }
+
+            sb.AppendLine("}");
+            return sb.ToString();
+        }
+
+        private static string ExtractMethodNameFromTemplate(string template, string functoidName, int functoidId) {
+            if (string.IsNullOrWhiteSpace(template)) {
+                // Fallback clean name alpha-numeric format strip
+                return $"Transform_{functoidName.Replace(" ", "")}_{functoidId}";
+            }
+
+            try {
+                // Look for common patterns like "public string StringLeft(" or "public double Add("
+                int openParenIndex = template.IndexOf('(');
+                if (openParenIndex > 0) {
+                    string leadingToParen = template.Substring(0, openParenIndex).Trim();
+                    int lastSpaceIndex = leadingToParen.LastIndexOf(' ');
+                    if (lastSpaceIndex >= 0) {
+                        string parsedName = leadingToParen.Substring(lastSpaceIndex + 1).Trim();
+                        if (!string.IsNullOrWhiteSpace(parsedName)) {
+                            return parsedName;
+                        }
+                    }
+                }
+            } catch {
+                // Avoid crash on malformed edge-cases
+            }
+
+            return $"Transform_{functoidName.Replace(" ", "")}_{functoidId}";
+        }
 
         protected override void OnMouseUp(MouseEventArgs e) {
             float centerLeft = leftTreeWidth;
@@ -672,28 +754,37 @@ namespace SkiaMapper.Controls {
             float mainContentHeight = Height - logPanelHeight;
 
             // --- 1. PALETTE DROP HANDLER: Add new Functoid to Workspace Canvas ---
+            // --- 1. PALETTE DROP HANDLER: Add new Functoid to Workspace Canvas ---
             if (draggingPaletteFunctoid != null) {
-                // Verify the drop point landed inside the central canvas grid bounds
                 if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
 
-                    // Calculate coordinates relative to the central canvas origin context
                     float localX = (e.X - centerLeft) - paletteItemDragOffset.X;
                     float localY = e.Y - paletteItemDragOffset.Y;
 
-                    // Restrict bounds so dropped items don't bleed beneath layout bars
                     if (localX < 0) localX = 0;
                     if (localX + 110f > (centerRight - centerLeft)) localX = (centerRight - centerLeft) - 110f;
                     if (localY < 0) localY = 0;
                     if (localY + 36f > mainContentHeight) localY = mainContentHeight - 36f;
 
-                    // Instantiate a completely fresh object to append to our collection stream
+                    // FIX: Extract clean function name from the ScriptTemplate content
+                    // e.g. "public string StringLeft(...)" -> target name is "StringLeft"
+                    string defaultMethodName = ExtractMethodNameFromTemplate(
+                        draggingPaletteFunctoid.ScriptTemplate,
+                        draggingPaletteFunctoid.Name,
+                        draggingPaletteFunctoid.Id
+                    );
+
                     var newInstance = new FunctoidInstance {
                         Id = Guid.NewGuid(),
                         X = localX,
                         Y = localY,
                         Width = 110f,
                         Height = 36f,
-                        Definition = draggingPaletteFunctoid
+                        Definition = draggingPaletteFunctoid,
+
+                        // CRITICAL FIX: Pull your complete CDATA script straight out of the XML configuration
+                        CustomScriptBody = draggingPaletteFunctoid.ScriptTemplate?.Trim(),
+                        CustomMethodName = defaultMethodName
                     };
 
                     ActiveFunctoids.Add(newInstance);
@@ -702,9 +793,8 @@ namespace SkiaMapper.Controls {
                 draggingPaletteFunctoid = null;
                 Capture = false;
                 Invalidate();
-                return; // Early break out so we don't accidentally check connection line logic
+                return;
             }
-
             // --- 2. MAP CONNECTION TRACE WIRE HANDLER ---
             if (dragSource != null) {
                 ConnectionEndpoint? dragTarget = null;
