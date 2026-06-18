@@ -47,7 +47,11 @@ namespace SkiaMapper.Controls {
 
         private const float HeaderIconSize = 20f;
         private ContextMenuStrip functoidContextMenu;
+        private ContextMenuStrip connectionContextMenu;
         private FunctoidInstance? contextTargetInstance = null;
+        private FunctoidInstance? selectedCanvasInstance = null; // <-- ADD THIS LINE
+        private MappingConnection? selectedConnection = null; // <-- ADD THIS LINE
+        private MappingConnection? contextTargetConnection = null;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public SchemaNode? SourceRoot { get; set; }
@@ -73,13 +77,142 @@ namespace SkiaMapper.Controls {
         public SkiaMapperControl() {
             this.DoubleBuffered = true;
             this.Dock = DockStyle.Fill;
-            // Initialize Context Menu Structures smoothly
+            this.SetStyle(ControlStyles.Selectable, true);
+
+            // 1. Initialize Functoid Context Menu
             functoidContextMenu = new ContextMenuStrip();
+
             var editScriptItem = new ToolStripMenuItem("Configure Script Block...");
             editScriptItem.Click += EditScriptItem_Click;
             functoidContextMenu.Items.Add(editScriptItem);
+
+            // --- ADDITION: Add Delete Item to Functoid Context Menu ---
+            var deleteFunctoidItem = new ToolStripMenuItem("Delete Functoid");
+            deleteFunctoidItem.Click += DeleteFunctoidItem_Click;
+            functoidContextMenu.Items.Add(deleteFunctoidItem);
+
+            // 2. Initialize Connection Wire Context Menu
+            connectionContextMenu = new ContextMenuStrip();
+            var deleteConnItem = new ToolStripMenuItem("Delete Connection Wire");
+            deleteConnItem.Click += DeleteConnectionItem_Click;
+            connectionContextMenu.Items.Add(deleteConnItem);
         }
-            private void EditScriptItem_Click(object? sender, EventArgs e) {
+        private void DeleteFunctoidItem_Click(object? sender, EventArgs e) {
+            if (contextTargetInstance != null) {
+                // 1. Cascade delete all wires tied to this specific instance ID (String-to-String comparison)
+                string targetId = contextTargetInstance.Id.ToString();
+                Connections.RemoveAll(c =>
+                    (c.Source?.Type == ConnectionEndpointType.Functoid && c.Source.FunctoidInstanceId?.ToString() == targetId) ||
+                    (c.Target?.Type == ConnectionEndpointType.Functoid && c.Target.FunctoidInstanceId?.ToString() == targetId)
+                );
+
+                // 2. Remove the block from the active tracking layout
+                ActiveFunctoids.Remove(contextTargetInstance);
+
+                // 3. Clear selection states cleanly
+                if (selectedCanvasInstance == contextTargetInstance) {
+                    selectedCanvasInstance = null;
+                }
+                contextTargetInstance = null;
+
+                // 4. Force immediate repaint
+                Invalidate();
+            }
+        }
+        private void DeleteConnectionItem_Click(object? sender, EventArgs e) {
+            if (contextTargetConnection != null) {
+                Connections.Remove(contextTargetConnection);
+
+                // Clear active selection tracking if it matches the deleted wire
+                if (selectedConnection == contextTargetConnection) {
+                    selectedConnection = null;
+                }
+
+                contextTargetConnection = null;
+                Invalidate(); // Force canvas repaint to clear the removed wire vector layout
+            }
+        }
+        private MappingConnection? FindConnectionAtPosition(float mouseX, float mouseY, float maxDistance = 12f) {
+            if (Connections == null) return null;
+
+            float centerLeft = leftTreeWidth;
+
+            foreach (var conn in Connections) {
+                if (conn == null || conn.Source == null || conn.Target == null) continue;
+
+                float startX = 0f, startY = 0f;
+                float endX = 0f, endY = 0f;
+
+                // 1. Resolve Start Point
+                if (conn.Source.Type == ConnectionEndpointType.Functoid) {
+                    if (conn.Source.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
+                    var instance = ActiveFunctoids.Find(f => f != null && f.Id == conn.Source.FunctoidInstanceId);
+                    if (instance != null) {
+                        startX = centerLeft + instance.X + instance.Width;
+                        startY = instance.Y + (instance.Height / 2f);
+                    } else continue;
+                } else {
+                    if (string.IsNullOrEmpty(conn.Source.NodePath)) continue;
+                    startY = FindNodeY(SourceRoot, conn.Source.NodePath);
+                    startX = leftTreeWidth - 25f;
+                    if (startY == -1) continue;
+                }
+
+                // 2. Resolve End Point
+                if (conn.Target.Type == ConnectionEndpointType.Functoid) {
+                    if (conn.Target.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
+                    var instance = ActiveFunctoids.Find(f => f != null && f.Id == conn.Target.FunctoidInstanceId);
+                    if (instance != null) {
+                        endX = centerLeft + instance.X;
+                        endY = instance.Y + (instance.Height / 2f);
+                    } else continue;
+                } else {
+                    if (string.IsNullOrEmpty(conn.Target.NodePath)) continue;
+                    endY = FindNodeY(DestinationRoot, conn.Target.NodePath);
+                    endX = Width - rightTreeWidth + 5f;
+                    if (endY == -1) continue;
+                }
+
+                // 3. Setup Cubic Bezier Control Points
+                float controlOffset = Math.Max(30f, Math.Abs(endX - startX) * 0.5f);
+                float cp1X = startX + controlOffset;
+                float cp1Y = startY;
+                float cp2X = endX - controlOffset;
+                float cp2Y = endY;
+
+                // 4. DYNAMIC SAMPLING ENGINE
+                // Estimate the linear bounding distance to scale step density accurately
+                float linearLength = (float)Math.Sqrt(Math.Pow(endX - startX, 2) + Math.Pow(endY - startY, 2));
+
+                // Dynamically assign samples: 1 sample per every 8 pixels of span, clamped between 20 and 100
+                int samples = Math.Clamp((int)(linearLength / 8f), 20, 100);
+
+                for (int i = 0; i <= samples; i++) {
+                    float t = i / (float)samples;
+
+                    // Polynomial Curve Weighting
+                    float mt = 1f - t;
+                    float f0 = mt * mt * mt;
+                    float f1 = 3f * mt * mt * t;
+                    float f2 = 3f * mt * t * t;
+                    float f3 = t * t * t;
+
+                    float ptX = (f0 * startX) + (f1 * cp1X) + (f2 * cp2X) + (f3 * endX);
+                    float ptY = (f0 * startY) + (f1 * cp1Y) + (f2 * cp2Y) + (f3 * endY);
+
+                    // Distance Check
+                    float dx = mouseX - ptX;
+                    float dy = mouseY - ptY;
+                    float distance = (float)Math.Sqrt(dx * dx + dy * dy);
+
+                    if (distance <= maxDistance) {
+                        return conn; // Success
+                    }
+                }
+            }
+            return null;
+        }
+        private void EditScriptItem_Click(object? sender, EventArgs e) {
             if (contextTargetInstance != null) {
                 using var editor = new Forms.ScriptEditorDialog(contextTargetInstance);
                 if (editor.ShowDialog() == DialogResult.OK) {
@@ -204,6 +337,8 @@ namespace SkiaMapper.Controls {
             using var pinPaint = new SKPaint { Color = new SKColor(130, 140, 150), Style = SKPaintStyle.Fill, IsAntialias = true };
 
             foreach (var functoid in ActiveFunctoids) {
+                if (functoid == null) continue;
+
                 float absoluteX = canvasLeftOffset + functoid.X;
                 SKRect rect = new SKRect(absoluteX, functoid.Y, absoluteX + functoid.Width, functoid.Y + functoid.Height);
 
@@ -216,7 +351,7 @@ namespace SkiaMapper.Controls {
                     var category = FunctoidCategories.Find(c => c.Id == functoid.Definition.CategoryId);
                     if (category != null) {
                         accentColor = GetCategoryColor(category.Color);
-                        // Apply a transparent alpha alpha blend (40 out of 255) for the block body 
+                        // Apply a transparent alpha blend (40 out of 255) for the block body 
                         // to maintain crisp text legibility against dark category definitions
                         nodeFillColor = new SKColor(accentColor.Red, accentColor.Green, accentColor.Blue, 40);
                         hasAccent = true;
@@ -227,6 +362,21 @@ namespace SkiaMapper.Controls {
                 using var dynamicBoxPaint = new SKPaint { Color = nodeFillColor, Style = SKPaintStyle.Fill, IsAntialias = true };
                 canvas.DrawRoundRect(rect, 4f, 4f, dynamicBoxPaint);
                 canvas.DrawRoundRect(rect, 4f, 4f, borderPaint);
+
+                // --- SELECTION HIGHLIGHT PROFILE ---
+                // If this block matches the active click selection, draw an outer focus halo
+                if (functoid == selectedCanvasInstance) {
+                    using var selectionRingPaint = new SKPaint {
+                        Color = SKColors.Orange, // Synced with mapping wire theme
+                        Style = SKPaintStyle.Stroke,
+                        StrokeWidth = 2.5f,
+                        IsAntialias = true
+                    };
+                    // Slightly expand outward so the ring frames the border without overlapping text
+                    SKRect selectionRect = rect;
+                    selectionRect.Inflate(1.5f, 1.5f);
+                    canvas.DrawRoundRect(selectionRect, 5f, 5f, selectionRingPaint);
+                }
 
                 // 3. Render Solid Category Accent Strip (Left Side Frame Flag)
                 if (hasAccent) {
@@ -242,7 +392,8 @@ namespace SkiaMapper.Controls {
                 canvas.DrawCircle(rect.Right, rect.MidY, 4f, pinPaint);
 
                 // 5. Draw Descriptive Label
-                canvas.DrawText(functoid.Definition.Name, rect.MidX + (hasAccent ? 2.5f : 0f), rect.MidY + 4f, textPaint);
+                string displayName = functoid.Definition != null ? functoid.Definition.Name : "Unknown";
+                canvas.DrawText(displayName, rect.MidX + (hasAccent ? 2.5f : 0f), rect.MidY + 4f, textPaint);
 
                 // 6. INDICATOR ONLY: Draw a simple red dot in the top-right corner if custom
                 bool isScriptCustomized = functoid.Definition != null &&
@@ -485,6 +636,9 @@ namespace SkiaMapper.Controls {
             float centerLeft = leftTreeWidth;
             float centerRight = Width - rightTreeWidth;
 
+            // Fix focus so keyboard events register instantly when the user clicks the control canvas
+            this.Focus();
+
             #region  1. Tool Palette Interactions Intercept
             if (paletteBounds.Contains(e.X, e.Y)) {
                 var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
@@ -578,6 +732,7 @@ namespace SkiaMapper.Controls {
                 return;
             }
             #endregion 1. Tool Palette Interactions Intercept
+
             #region 2 Canvas Functoid Click Intercept
             // 2. Existing Canvas Functoid Click Intercept
             if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
@@ -602,8 +757,8 @@ namespace SkiaMapper.Controls {
                             };
                             currentDragPoint = new PointF(itemRect.Right, itemRect.MidY);
                         }
-                        // Clicked Left Half: Drag and reposition the block layout node 
-                        else {
+                         // Clicked Left Half: Drag and reposition the block layout node 
+                         else {
                             draggingCanvasInstance = instance;
                             canvasInstanceDragOffset = new PointF(e.X - absoluteX, e.Y - instance.Y);
                         }
@@ -615,6 +770,7 @@ namespace SkiaMapper.Controls {
                 }
             }
             #endregion 2
+
             #region 3. Source Node Linking Line Selection Intercept
             if (e.X < leftTreeWidth && e.Y < mainContentHeight && SourceRoot != null) {
                 SchemaNode? targetedNode = FindNodeAtPosition(SourceRoot, e.Y);
@@ -630,20 +786,83 @@ namespace SkiaMapper.Controls {
                 }
             }
             #endregion 3
+
             #region 4 Component Layout Splitters Sizing Slices
             if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) {
                 isResizingLog = true;
                 Capture = true;
+                return;
             } else if (Math.Abs(e.X - leftTreeWidth) < SplitterWidth) {
                 isResizingLeft = true;
                 Capture = true;
+                return;
             } else if (Math.Abs(e.X - centerRight) < SplitterWidth) {
                 isResizingRight = true;
                 Capture = true;
+                return;
             }
             #endregion 4
+
+            #region 5. Mapping Connection Selection Intercept
+            var hitConnection = FindConnectionAtPosition(e.X, e.Y);
+
+            if (e.Button == MouseButtons.Right) {
+                if (hitConnection != null) {
+                    contextTargetConnection = hitConnection;
+                    selectedConnection = hitConnection;
+                    selectedCanvasInstance = null; // Clear active block highlight
+                    Invalidate();
+
+                    if (connectionContextMenu != null) {
+                        connectionContextMenu.Show(this, e.Location);
+                    }
+                }
+            } else if (e.Button == MouseButtons.Left) {
+                if (hitConnection != selectedConnection) {
+                    selectedConnection = hitConnection;
+                    if (hitConnection != null) selectedCanvasInstance = null; // Drop node selection if wire hit
+                    Invalidate();
+                }
+            }
+            #endregion 5
         }
-      
+        protected override void OnKeyDown(KeyEventArgs e) {
+            base.OnKeyDown(e);
+
+            if (e.KeyCode == Keys.Delete) {
+                // CASE A: A Canvas Functoid Block is targeted for deletion
+                if (selectedCanvasInstance != null) {
+                    // 1. Cascade delete all wires tied to this specific instance ID
+                    string targetId = selectedCanvasInstance.Id.ToString();
+                    Connections.RemoveAll(c =>
+         (c.Source?.Type == ConnectionEndpointType.Functoid && c.Source.FunctoidInstanceId?.ToString() == targetId) ||
+         (c.Target?.Type == ConnectionEndpointType.Functoid && c.Target.FunctoidInstanceId?.ToString() == targetId)
+     );
+
+                    // 2. Remove the block itself from the active list
+                    ActiveFunctoids.Remove(selectedCanvasInstance);
+
+                    // 3. Clean up tracking states safely
+                    if (contextTargetInstance == selectedCanvasInstance) contextTargetInstance = null;
+                    selectedCanvasInstance = null;
+
+                    Invalidate();
+                    e.Handled = true;
+                    return;
+                }
+
+                // CASE B: A Wire Trace is targeted for deletion (Our existing logic)
+                if (selectedConnection != null) {
+                    Connections.Remove(selectedConnection);
+                    if (contextTargetConnection == selectedConnection) contextTargetConnection = null;
+                    selectedConnection = null;
+
+                    Invalidate();
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
         protected override void OnMouseMove(MouseEventArgs e) {
             lastMousePos = new PointF(e.X, e.Y);
             float centerLeft = leftTreeWidth;
