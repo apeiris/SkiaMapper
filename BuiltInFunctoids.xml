@@ -3,7 +3,7 @@
 	<Categories>
 		<Category name="String" Id="1" Color="LightBlue" />
 		<Category name="Mathematical" Id="2" Color="LightGreen" />
-		<Category name="Date" Id="3" Color="LightYellow" />
+		<Category name="Date" Id="3" Color="Brown" />
 	</Categories>
 	<Functoid name="Concatenate" catId="1" Id="100" >
 		<MethodNameFormat>string.Concat({0})</MethodNameFormat>

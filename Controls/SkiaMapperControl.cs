@@ -528,12 +528,17 @@ namespace SkiaMapper.Controls {
             canvas.DrawRoundRect(paletteBounds, 6f, 6f, borderPaint);
         }
         private SKColor GetCategoryColor(string colorName) {
-            return colorName.ToLower() switch {
-                "lightblue" => new SKColor(135, 206, 250),
-                "lightgreen" => new SKColor(144, 238, 144),
-                "lightyellow" => new SKColor(255, 255, 224),
-                _ => SKColors.LightGray
-            };
+            if (string.IsNullOrEmpty(colorName)) return SKColors.LightGray;
+
+            // Resolves standard system web color signatures dynamically (e.g., "Brown", "LightBlue")
+            System.Drawing.Color systemColor = System.Drawing.Color.FromName(colorName);
+
+            // Check if the name returned a valid known color structure; otherwise, apply fallback
+            if (systemColor.IsKnownColor) {
+                return new SKColor(systemColor.R, systemColor.G, systemColor.B, systemColor.A);
+            }
+
+            return SKColors.LightGray;
         }
 
         private void RenderMapConnections(SKCanvas canvas) {
