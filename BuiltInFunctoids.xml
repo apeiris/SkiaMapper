@@ -1,10 +1,15 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <BuiltInFunctoids>
 	<Categories>
-		<Category name="String" Id="1" Color="LightBlue" />
-		<Category name="Mathematical" Id="2" Color="LightGreen" />
-		<Category name="Date" Id="3" Color="Brown" />
+		<Category name="String" Id="1" Color="MediumSeaGreen" />
+		<Category name="Mathematical" Id="2" Color="DodgerBlue" />
+		<Category name="Logical" Id="3" Color="Orange" />
+		<Category name="Date" Id="4" Color="Orchid" />
+		<Category name="Conversion" Id="5" Color="Coral" />
+		<Category name="Scientific" Id="6" Color="SteelBlue" />
+		<Category name="DataBase" Id="7" Color="Goldenrod" />
 	</Categories>
+
 	<Functoid name="Concatenate" catId="1" Id="100" >
 		<MethodNameFormat>string.Concat({0})</MethodNameFormat>
 		<JoinOperator>, </JoinOperator>
@@ -39,6 +44,7 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
+
 	<Functoid name="String Constant" catId="1" Id="130" >
 		<MethodNameFormat>"{0}"</MethodNameFormat>
 		<ScriptTemplate>
@@ -49,8 +55,6 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
-	
-	
 
 	<Functoid name="Add" catId="2" Id="200" >
 		<MethodNameFormat>({0})</MethodNameFormat>
@@ -81,33 +85,60 @@
 		</ScriptTemplate>
 	</Functoid>
 
-	<Functoid name="Add Days" catId="3" Id="300" >
+	<Functoid name="Add Days" catId="4" Id="300" >
 		<MethodNameFormat>DateTime.Parse({0}).AddDays({1}).ToString("yyyy-MM-dd")</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
-      
-	  public string AddDays(string dateStr, string daysStr)
-{
-    if (string.IsNullOrEmpty(dateStr)) return "";
-    if (!double.TryParse(daysStr ?? "0", out double days)) return dateStr;
-
-    if (DateTime.TryParse(dateStr, out DateTime dt))
-    {
-        dt = dt.AddDays((int)days);
-        return dt.ToString("yyyy-MM-dd");   // or "o" for full ISO
-    }
-    return dateStr;
-}
+      public string AddDays(string dateStr, string daysStr) {
+          if (string.IsNullOrEmpty(dateStr)) return "";
+          if (!double.TryParse(daysStr ?? "0", out double days)) return dateStr;
+          if (DateTime.TryParse(dateStr, out DateTime dt)) {
+              dt = dt.AddDays((int)days);
+              return dt.ToString("yyyy-MM-dd");
+          }
+          return dateStr;
+      }
       ]]>
 		</ScriptTemplate>
 	</Functoid>
 
-	<Functoid name="Current Date" catId="3" Id="310" >
+	<Functoid name="Current Date" catId="4" Id="310" >
 		<MethodNameFormat>DateTime.Now.ToString("yyyy-MM-dd")</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
       public string CurrentDate() {
           return DateTime.Now.ToString("yyyy-MM-dd");
+      }
+      ]]>
+		</ScriptTemplate>
+	</Functoid>
+	<Functoid name="Database Lookup" catId="7" Id="700" >
+		<MethodNameFormat>DatabaseLookup({0}, {1}, {2}, {3})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+      public string DatabaseLookup(string lookupValue, string connectionString, string tableName, string columnName) {
+          if (string.IsNullOrEmpty(lookupValue) || string.IsNullOrEmpty(connectionString)) return string.Empty;
+          if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(columnName)) return string.Empty;
+
+          // Clean names to prevent dynamic SQL structural injection issues
+          string cleanTable = System.Text.RegularExpressions.Regex.Replace(tableName, @"[^A-Za-z0-9_]", "");
+          string cleanColumn = System.Text.RegularExpressions.Regex.Replace(columnName, @"[^A-Za-z0-9_]", "");
+
+          string query = $"SELECT [{cleanColumn}] FROM [{cleanTable}] WHERE [Id] = @Param";
+
+          try {
+              using (var conn = new System.Data.SqlClient.SqlConnection(connectionString))
+              using (var cmd = new System.Data.SqlClient.SqlCommand(query, conn)) {
+                  cmd.Parameters.Add(new System.Data.SqlClient.SqlParameter("@Param", lookupValue));
+                  conn.Open();
+                  var result = cmd.ExecuteScalar();
+                  return result != null ? result.ToString() : string.Empty;
+              }
+          }
+          catch (Exception ex) {
+              // Gracefully return empty string on connection failures, missing columns, or bad keys
+              return string.Empty;
+          }
       }
       ]]>
 		</ScriptTemplate>

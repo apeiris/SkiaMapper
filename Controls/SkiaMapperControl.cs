@@ -43,7 +43,7 @@ namespace SkiaMapper.Controls {
         // Inside your metrics fields area
         private SKRect saveBtnRect;
         private SKRect loadBtnRect;
-        private SKRect clearBtnRect; 
+        private SKRect clearBtnRect;
 
         private const float HeaderIconSize = 20f;
         private ContextMenuStrip functoidContextMenu;
@@ -52,6 +52,15 @@ namespace SkiaMapper.Controls {
         private FunctoidInstance? selectedCanvasInstance = null; // <-- ADD THIS LINE
         private MappingConnection? selectedConnection = null; // <-- ADD THIS LINE
         private MappingConnection? contextTargetConnection = null;
+
+
+        private float toolboxVirtualScrollY = 0f;
+        private float maxToolboxContentHeight = 0f;
+        private bool isDraggingToolboxScrollbar = false;
+
+
+        private float toolboxScrollbarDragStartY = 0f;
+        private float toolboxScrollbarDragStartScrollY = 0f;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public SchemaNode? SourceRoot { get; set; }
@@ -96,7 +105,51 @@ namespace SkiaMapper.Controls {
             var deleteConnItem = new ToolStripMenuItem("Delete Connection Wire");
             deleteConnItem.Click += DeleteConnectionItem_Click;
             connectionContextMenu.Items.Add(deleteConnItem);
+
+            this.MouseWheel += SkiaMapperControl_MouseWheel;
         }
+
+        private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
+            if (isPaletteExpanded && paletteBounds.Contains(e.X, e.Y)) {
+                float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
+                maxToolboxContentHeight = CalculateTotalToolboxContentHeight();
+
+                if (maxToolboxContentHeight <= viewableHeight) {
+                    toolboxVirtualScrollY = 0f;
+                    Invalidate();
+                    return;
+                }
+
+                // Adjust scroll tracking offset (inverted standard wheel direction delta)
+                int scrollDelta = e.Delta > 0 ? 30 : -30;
+                toolboxVirtualScrollY += scrollDelta;
+
+                // Secure bounds clamp
+                float minScrollY = -(maxToolboxContentHeight - viewableHeight);
+                toolboxVirtualScrollY = Math.Clamp(toolboxVirtualScrollY, minScrollY, 0f);
+
+                Invalidate(); // Force repaint
+            }
+        }
+        private float CalculateTotalToolboxContentHeight() {
+            float itemHeight = 24f;
+            float categoryHeaderHeight = 22f;
+            float totalHeight = 0f;
+
+            foreach (var category in FunctoidCategories) {
+                totalHeight += categoryHeaderHeight + 4f; // Header + padding
+
+                if (category.IsExpanded) {
+                    foreach (var functoid in AvailableFunctoids) {
+                        if (functoid.CategoryId != category.Id) continue;
+                        totalHeight += itemHeight + 4f; // Item row + padding
+                    }
+                }
+                totalHeight += 6f; // Gap between sections
+            }
+            return totalHeight;
+        }
+
         private void DeleteFunctoidItem_Click(object? sender, EventArgs e) {
             if (contextTargetInstance != null) {
                 // 1. Cascade delete all wires tied to this specific instance ID (String-to-String comparison)
@@ -220,7 +273,7 @@ namespace SkiaMapper.Controls {
                     Invalidate();
                 }
             }
-        
+
         }
 
         protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
@@ -484,47 +537,96 @@ namespace SkiaMapper.Controls {
 
             // Render Contents (Skip completely if collapsed)
             if (isPaletteExpanded) {
-                float currentYOffset = paletteBounds.Top + PaletteHeaderHeight + 8f;
-                float leftPadding = paletteBounds.Left + 8f;
                 float itemWidth = paletteBounds.Width - 16f;
+                float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
+
+                // Dynamically compute size and determine overflow layout settings
+                maxToolboxContentHeight = CalculateTotalToolboxContentHeight();
+                bool needsScrollbar = maxToolboxContentHeight > viewableHeight;
+                float usableItemWidth = needsScrollbar ? itemWidth - 12f : itemWidth;
+
+                float leftPadding = paletteBounds.Left + 8f;
                 float itemHeight = 24f;
                 float categoryHeaderHeight = 22f;
 
-                foreach (var category in FunctoidCategories) {
-                    if (currentYOffset + categoryHeaderHeight > paletteBounds.Bottom - 8f) break;
+                // --- 1. VIEWPORT CLIPPING ZONE ---
+                // Retain an inner canvas viewport mask so elements don't write over headers/borders when scrolling up/down
+                canvas.Save();
+                SKRect contentClipArea = new SKRect(
+                    paletteBounds.Left + 2f,
+                    paletteBounds.Top + PaletteHeaderHeight + 2f,
+                    paletteBounds.Right - 2f,
+                    paletteBounds.Bottom - 4f
+                );
+                canvas.ClipRect(contentClipArea);
 
-                    SKRect catHeaderRect = new SKRect(leftPadding, currentYOffset, leftPadding + itemWidth, currentYOffset + categoryHeaderHeight);
+                // Apply our scrolling conversion offset to the moving tracking point
+                float startYPosition = paletteBounds.Top + PaletteHeaderHeight + 8f;
+                float virtualTrackingY = startYPosition + toolboxVirtualScrollY;
+
+                foreach (var category in FunctoidCategories) {
+                    SKRect catHeaderRect = new SKRect(leftPadding, virtualTrackingY, leftPadding + usableItemWidth, virtualTrackingY + categoryHeaderHeight);
                     category.LastRenderedHeaderBounds = catHeaderRect;
 
-                    canvas.DrawRoundRect(catHeaderRect, 3f, 3f, categoryBgPaint);
-                    string arrowToken = category.IsExpanded ? "▼ " : "► ";
-                    canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f, categoryTextPaint);
+                    // Only issue draws if the layout element overlaps the view window matrix
+                    if (catHeaderRect.Bottom > contentClipArea.Top && catHeaderRect.Top < contentClipArea.Bottom) {
+                        canvas.DrawRoundRect(catHeaderRect, 3f, 3f, categoryBgPaint);
+                        string arrowToken = category.IsExpanded ? "▼ " : "► ";
+                        canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f, categoryTextPaint);
+                    }
 
-                    currentYOffset += categoryHeaderHeight + 4f;
+                    virtualTrackingY += categoryHeaderHeight + 4f;
 
                     if (category.IsExpanded) {
                         foreach (var functoid in AvailableFunctoids) {
                             if (functoid.CategoryId != category.Id) continue;
-                            if (currentYOffset + itemHeight > paletteBounds.Bottom - 8f) break;
 
-                            SKRect rowRect = new SKRect(leftPadding + 6f, currentYOffset, leftPadding + itemWidth - 6f, currentYOffset + itemHeight);
+                            SKRect rowRect = new SKRect(leftPadding + 6f, virtualTrackingY, leftPadding + usableItemWidth - 6f, virtualTrackingY + itemHeight);
                             renderedItemHitboxes[functoid] = rowRect;
 
-                            canvas.DrawRoundRect(rowRect, 3f, 3f, itemBoxPaint);
-                            canvas.DrawRoundRect(rowRect, 3f, 3f, itemBorderPaint);
+                            if (rowRect.Bottom > contentClipArea.Top && rowRect.Top < contentClipArea.Bottom) {
+                                canvas.DrawRoundRect(rowRect, 3f, 3f, itemBoxPaint);
+                                canvas.DrawRoundRect(rowRect, 3f, 3f, itemBorderPaint);
 
-                            using var dotPaint = new SKPaint { Color = GetCategoryColor(category.Color), Style = SKPaintStyle.Fill, IsAntialias = true };
-                            canvas.DrawCircle(rowRect.Left + 12f, rowRect.MidY, 4f, dotPaint);
+                                using var dotPaint = new SKPaint { Color = GetCategoryColor(category.Color), Style = SKPaintStyle.Fill, IsAntialias = true };
+                                canvas.DrawCircle(rowRect.Left + 12f, rowRect.MidY, 4f, dotPaint);
 
-                            canvas.DrawText(functoid.Name, rowRect.Left + 24f, rowRect.Top + 16f, itemTextPaint);
+                                canvas.DrawText(functoid.Name, rowRect.Left + 24f, rowRect.Top + 16f, itemTextPaint);
+                            }
 
-                            currentYOffset += itemHeight + 4f;
+                            virtualTrackingY += itemHeight + 4f;
                         }
                     }
-                    currentYOffset += 6f;
+                    virtualTrackingY += 6f;
+                }
+
+                canvas.Restore(); // Pop out of clipping scope safely
+
+                // --- 2. RENDER SCROLLBAR OVERLAY PANEL ---
+                if (needsScrollbar) {
+                    float scrollbarWidth = 5f;
+                    float trackLeft = paletteBounds.Right - scrollbarWidth - 6f;
+                    float trackTop = paletteBounds.Top + PaletteHeaderHeight + 6f;
+                    float trackHeight = viewableHeight;
+
+                    float viewRatio = trackHeight / maxToolboxContentHeight;
+                    float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
+
+                    float scrollMaxVirtual = maxToolboxContentHeight - trackHeight;
+                    float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-toolboxVirtualScrollY / scrollMaxVirtual);
+                    float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
+
+                    // Light track line background bar channel
+                    using var trackPaint = new SKPaint { Color = new SKColor(220, 225, 235, 120), Style = SKPaintStyle.Fill, IsAntialias = true };
+                    canvas.DrawRoundRect(new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight), 2.5f, 2.5f, trackPaint);
+
+                    // Darker tracking handle block
+                    using var thumbPaint = new SKPaint { Color = new SKColor(150, 165, 180, 200), Style = SKPaintStyle.Fill, IsAntialias = true };
+                    canvas.DrawRoundRect(new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight), 2.5f, 2.5f, thumbPaint);
                 }
             }
 
+            // Always draw container border shell crisp on top edge layers
             canvas.DrawRoundRect(paletteBounds, 6f, 6f, borderPaint);
         }
         private SKColor GetCategoryColor(string colorName) {
@@ -716,14 +818,43 @@ namespace SkiaMapper.Controls {
 
                 // Only process category expanding or item dragging if open
                 if (isPaletteExpanded) {
+                    float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
+
+                    // --- A. SCROLLBAR THUMB CLICK INTERCEPT ---
+                    if (maxToolboxContentHeight > viewableHeight) {
+                        float scrollbarWidth = 5f;
+                        float trackLeft = paletteBounds.Right - scrollbarWidth - 6f;
+                        float trackTop = paletteBounds.Top + PaletteHeaderHeight + 6f;
+
+                        // Interactive target matching the rendered layout coordinates
+                        SKRect scrollHitRect = new SKRect(trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
+
+                        if (scrollHitRect.Contains(e.X, e.Y)) {
+                            isDraggingToolboxScrollbar = true;
+                            toolboxScrollbarDragStartY = e.Y;
+                            toolboxScrollbarDragStartScrollY = toolboxVirtualScrollY;
+                            Capture = true;
+                            return;
+                        }
+                    }
+
+                    // --- B. CATEGORY HEADER CLICKS ---
                     foreach (var category in FunctoidCategories) {
                         if (category.LastRenderedHeaderBounds.Contains(e.X, e.Y)) {
                             category.IsExpanded = !category.IsExpanded;
+
+                            // Instant dynamic boundary updates upon layout shifting
+                            maxToolboxContentHeight = CalculateTotalToolboxContentHeight();
+                            float minScrollY = -(maxToolboxContentHeight - viewableHeight);
+                            if (minScrollY > 0) minScrollY = 0;
+
+                            toolboxVirtualScrollY = Math.Clamp(toolboxVirtualScrollY, minScrollY, 0f);
                             Invalidate();
                             return;
                         }
                     }
 
+                    // --- C. FUNCTOID ITEM CLICKS/DRAG ROW INTERCEPT ---
                     foreach (var itemEntry in renderedItemHitboxes) {
                         if (itemEntry.Value.Contains(e.X, e.Y)) {
                             draggingPaletteFunctoid = itemEntry.Key;
