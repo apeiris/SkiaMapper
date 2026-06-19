@@ -81,11 +81,10 @@ public class SkiaMapperControl : SKControl {
     public List<FunctoidDefinition> AvailableFunctoids { get; set; } = new();
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public List<FunctoidInstance> ActiveFunctoids { get; set; } = new();
+    public ObservableCollection<FunctoidInstance> ActiveFunctoids { get; } = new();
 
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public List<MappingConnection> Connections { get; set; } = new();
-
+    public ObservableCollection<MappingConnection> Connections { get; } = new();
 
 
 
@@ -115,7 +114,20 @@ public class SkiaMapperControl : SKControl {
         deleteConnItem.Click += DeleteConnectionItem_Click;
         connectionContextMenu.Items.Add(deleteConnItem);
 
+        // 3. Native Mouse Wheel Scroll Intercept Hook
         this.MouseWheel += SkiaMapperControl_MouseWheel;
+
+        // 4. Automated Canvas State Architecture Hook
+        // Automatically sets IsCanvasDirty = true on any layout additions, deletions, or clears
+        ActiveFunctoids.CollectionChanged += OnCanvasStructureChanged;
+        Connections.CollectionChanged += OnCanvasStructureChanged;
+    }
+
+    /// <summary>
+    /// Built-in event handler catching any item modifications inside your map layout data models.
+    /// </summary>
+    private void OnCanvasStructureChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) {
+        isCanvasDirty = true;
     }
 
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
@@ -163,11 +175,15 @@ public class SkiaMapperControl : SKControl {
         if (contextTargetInstance != null) {
             // 1. Cascade delete all wires tied to this specific instance ID (String-to-String comparison)
             string targetId = contextTargetInstance.Id.ToString();
-            Connections.RemoveAll(c =>
+            // --- REVISED: Safe target tracking lookup for ObservableCollection ---
+            var connectionsToRemove = Connections.Where(c =>
                 (c.Source?.Type == ConnectionEndpointType.Functoid && c.Source.FunctoidInstanceId?.ToString() == targetId) ||
                 (c.Target?.Type == ConnectionEndpointType.Functoid && c.Target.FunctoidInstanceId?.ToString() == targetId)
-            );
+            ).ToArray();
 
+            foreach (var connection in connectionsToRemove) {
+                Connections.Remove(connection);
+            }
             // 2. Remove the block from the active tracking layout
             ActiveFunctoids.Remove(contextTargetInstance);
 
@@ -183,17 +199,17 @@ public class SkiaMapperControl : SKControl {
     }
     private void DeleteConnectionItem_Click(object? sender, EventArgs e) {
         if (contextTargetConnection != null) {
+            // This single line now removes the wire, automatically sets IsCanvasDirty = true,
+            // and instantly schedules a new OnPaint layout pass.
             Connections.Remove(contextTargetConnection);
 
             // Clear active selection tracking if it matches the deleted wire
             if (selectedConnection == contextTargetConnection) {
-                isCanvasDirty = true; // Mark canvas as dirty since a change was made
                 selectedConnection = null;
             }
 
             contextTargetConnection = null;
-
-            Invalidate(); // Force canvas repaint to clear the removed wire vector layout
+            this.Invalidate();
         }
     }
     private MappingConnection? FindConnectionAtPosition(float mouseX, float mouseY, float maxDistance = 12f) {
@@ -210,7 +226,9 @@ public class SkiaMapperControl : SKControl {
             // 1. Resolve Start Point
             if (conn.Source.Type == ConnectionEndpointType.Functoid) {
                 if (conn.Source.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
-                var instance = ActiveFunctoids.Find(f => f != null && f.Id == conn.Source.FunctoidInstanceId);
+             
+                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
+                var instance = ActiveFunctoids.FirstOrDefault(f => f != null && f.Id == conn.Source.FunctoidInstanceId);
                 if (instance != null) {
                     startX = centerLeft + instance.X + instance.Width;
                     startY = instance.Y + (instance.Height / 2f);
@@ -225,7 +243,8 @@ public class SkiaMapperControl : SKControl {
             // 2. Resolve End Point
             if (conn.Target.Type == ConnectionEndpointType.Functoid) {
                 if (conn.Target.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
-                var instance = ActiveFunctoids.Find(f => f != null && f.Id == conn.Target.FunctoidInstanceId);
+                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
+                var instance = ActiveFunctoids.FirstOrDefault(f => f != null && f.Id == conn.Target.FunctoidInstanceId);
                 if (instance != null) {
                     endX = centerLeft + instance.X;
                     endY = instance.Y + (instance.Height / 2f);
@@ -658,7 +677,9 @@ public class SkiaMapperControl : SKControl {
             // 1. EVALUATE START POINT (Where is the line coming from?)
             // ALIGNED: Using ConnectionEndpointType.Functoid from MappingProject.cs
             if (conn.Source.Type == ConnectionEndpointType.Functoid && conn.Source.FunctoidInstanceId != null) {
-                var instance = ActiveFunctoids.Find(f => f.Id == conn.Source.FunctoidInstanceId);
+             
+                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
+                var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Source.FunctoidInstanceId);
                 if (instance != null) {
                     startX = centerLeft + instance.X + instance.Width; // Starts at right edge of functoid
                     startY = instance.Y + (instance.Height / 2f);
@@ -673,7 +694,8 @@ public class SkiaMapperControl : SKControl {
             // 2. EVALUATE END POINT (Where is the line going to?)
             // ALIGNED: Using ConnectionEndpointType.Functoid from MappingProject.cs
             if (conn.Target.Type == ConnectionEndpointType.Functoid && conn.Target.FunctoidInstanceId != null) {
-                var instance = ActiveFunctoids.Find(f => f.Id == conn.Target.FunctoidInstanceId);
+                      // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
+                var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Target.FunctoidInstanceId);
                 if (instance != null) {
                     endX = centerLeft + instance.X; // Ends at left edge of functoid
                     endY = instance.Y + (instance.Height / 2f);
@@ -865,7 +887,7 @@ public class SkiaMapperControl : SKControl {
                                 draggingPaletteFunctoid = itemEntry.Key;
                                 paletteItemDragOffset = new PointF(55f, 18f);
                                 Capture = true;
-                                isCanvasDirty = true;
+                     
                                 Invalidate();
                                 return;
                             }
@@ -893,7 +915,7 @@ public class SkiaMapperControl : SKControl {
                                 draggingCanvasInstance = instance;
                                 canvasInstanceDragOffset = new PointF(e.X - absoluteX, e.Y - instance.Y);
                             }
-                            isCanvasDirty = true;
+                          
                             Capture = true;
                             Invalidate();
                             return;
@@ -993,10 +1015,15 @@ public class SkiaMapperControl : SKControl {
             if (selectedCanvasInstance != null) {
                 // 1. Cascade delete all wires tied to this specific instance ID
                 string targetId = selectedCanvasInstance.Id.ToString();
-                Connections.RemoveAll(c =>
-     (c.Source?.Type == ConnectionEndpointType.Functoid && c.Source.FunctoidInstanceId?.ToString() == targetId) ||
-     (c.Target?.Type == ConnectionEndpointType.Functoid && c.Target.FunctoidInstanceId?.ToString() == targetId)
- );
+                // --- REVISED FOR LINE 1012: Safe lookup for ObservableCollection ---
+                var connectionsToRemove = Connections.Where(c =>
+                    (c.Source?.Type == ConnectionEndpointType.Functoid && c.Source.FunctoidInstanceId?.ToString() == targetId) ||
+                    (c.Target?.Type == ConnectionEndpointType.Functoid && c.Target.FunctoidInstanceId?.ToString() == targetId)
+                ).ToArray();
+
+                foreach (var connection in connectionsToRemove) {
+                    Connections.Remove(connection);
+                }
 
                 // 2. Remove the block itself from the active list
                 ActiveFunctoids.Remove(selectedCanvasInstance);
@@ -1266,8 +1293,9 @@ public class SkiaMapperControl : SKControl {
     /// </summary>
     public string SaveConfiguration() {
         var state = new MappingProjectState {
-            ActiveFunctoids = this.ActiveFunctoids,
-            Connections = this.Connections
+            // --- REVISED: Extract data as standard Lists for serialization compatibility ---
+            ActiveFunctoids = this.ActiveFunctoids.ToList(),
+            Connections = this.Connections.ToList()
         };
 
         var serializer = new XmlSerializer(typeof(MappingProjectState));
@@ -1295,9 +1323,11 @@ public class SkiaMapperControl : SKControl {
 
                 // Rehydrate collections
                 if (loadedState.ActiveFunctoids != null) {
-                    this.ActiveFunctoids.AddRange(loadedState.ActiveFunctoids);
+                    // --- REVISED: Use a loop to populate the ObservableCollection ---
+                    foreach (var functoid in loadedState.ActiveFunctoids) {
+                        this.ActiveFunctoids.Add(functoid);
+                    }
                 }
-
                 if (loadedState.Connections != null) {
                     // Rehydrate the input index lookup safety map
                     foreach (var conn in loadedState.Connections) {
@@ -1306,9 +1336,14 @@ public class SkiaMapperControl : SKControl {
                             conn.Target.InputIndex = conn.Target.ArgumentIndex;
                         }
                     }
-                    this.Connections.AddRange(loadedState.Connections);
+                    if (loadedState.Connections != null) {
+                        // --- REVISED: Use a loop to populate the ObservableCollection ---
+                        foreach (var connection in loadedState.Connections) {
+                            this.Connections.Add(connection);
+                        }
+                    }
                 }
-
+                this.isCanvasDirty = false;
                 // Force SkiaSharp to repaint the newly hydrated layout elements immediately
                 this.Invalidate();
             }
