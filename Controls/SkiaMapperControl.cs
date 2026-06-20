@@ -10,7 +10,6 @@ using System.Xml;
 using System.Xml.Serialization;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-
 namespace SkiaMapper.Controls;
 
 public class SkiaMapperControl : SKControl {
@@ -19,38 +18,31 @@ public class SkiaMapperControl : SKControl {
     private float rightTreeWidth = 280f;
     private float logPanelHeight = 120f;
     private const float SplitterWidth = 5f;
-
     // Tool Palette Window Metrics
     private SKRect paletteBounds = new SKRect(310f, 30f, 550f, 450f);
     private const float PaletteHeaderHeight = 64f;
     private bool isDraggingPalette = false;
     private PointF paletteDragOffset;
-
     private bool isPaletteExpanded = true;
-    private float expandedPaletteHeight = 420f; // Remembers its size when open
-
+    // Remembers its size when open
+    private float expandedPaletteHeight = 420f;
     // Drag-and-Drop / Interactive Link State Tracking
     private FunctoidDefinition? draggingPaletteFunctoid = null;
     private PointF paletteItemDragOffset;
     private Dictionary<FunctoidDefinition, SKRect> renderedItemHitboxes = new();
-
     private FunctoidInstance? draggingCanvasInstance = null;
     private PointF canvasInstanceDragOffset;
-
     // Active Splitter/Line Drag Tracking
     private bool isResizingLog = false;
     private bool isResizingLeft = false;
     private bool isResizingRight = false;
     private bool isCanvasDirty = false;
     private PointF lastMousePos;
-
     // Functoid tool box header button hit boxes (Save, Load, Clear, Execute XSLT)
     private SKRect saveBtnRect;
     private SKRect loadBtnRect;
     private SKRect clearBtnRect;
     private SKRect executeXsltBtnRect;
-
-
     private const float HeaderIconSize = 20f;
     private ContextMenuStrip functoidContextMenu;
     private ContextMenuStrip connectionContextMenu;
@@ -58,41 +50,25 @@ public class SkiaMapperControl : SKControl {
     private FunctoidInstance? selectedCanvasInstance = null; // <-- ADD THIS LINE
     private MappingConnection? selectedConnection = null; // <-- ADD THIS LINE
     private MappingConnection? contextTargetConnection = null;
-
-
     private float toolboxVirtualScrollY = 0f;
     private float maxToolboxContentHeight = 0f;
     private bool isDraggingToolboxScrollbar = false;
-
-
     private float toolboxScrollbarDragStartY = 0f;
     private float toolboxScrollbarDragStartScrollY = 0f;
-
-
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public SchemaNode? SourceRoot { get; set; }
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public SchemaNode? DestinationRoot { get; set; }
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public List<FunctoidCategory> FunctoidCategories { get; set; } = new();
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public List<FunctoidDefinition> AvailableFunctoids { get; set; } = new();
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public ObservableCollection<FunctoidInstance> ActiveFunctoids { get; } = new();
-
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public ObservableCollection<MappingConnection> Connections { get; } = new();
-
-
-
     private ConnectionEndpoint? dragSource = null;
     private PointF currentDragPoint;
-
     public SkiaMapperControl() {
         this.DoubleBuffered = true;
         this.Dock = DockStyle.Fill;
@@ -167,7 +143,6 @@ public class SkiaMapperControl : SKControl {
     private void OnCanvasStructureChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) {
         isCanvasDirty = true;
     }
-
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
         if (isPaletteExpanded && paletteBounds.Contains(e.X, e.Y)) {
             float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
@@ -264,7 +239,7 @@ public class SkiaMapperControl : SKControl {
             // 1. Resolve Start Point
             if (conn.Source.Type == ConnectionEndpointType.Functoid) {
                 if (conn.Source.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
-             
+
                 // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
                 var instance = ActiveFunctoids.FirstOrDefault(f => f != null && f.Id == conn.Source.FunctoidInstanceId);
                 if (instance != null) {
@@ -333,6 +308,18 @@ public class SkiaMapperControl : SKControl {
         }
         return null;
     }
+    private SchemaNode? FindNodeByPath(SchemaNode? currentNode, string? path) {
+        if (currentNode == null || string.IsNullOrEmpty(path)) return null;
+        if (currentNode.Name == path) return currentNode;
+
+        if (currentNode.Children != null) {
+            foreach (var child in currentNode.Children) {
+                var found = FindNodeByPath(child, path);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
     private void EditScriptItem_Click(object? sender, EventArgs e) {
         if (contextTargetInstance != null) {
             using var editor = new Forms.ScriptEditorDialog(contextTargetInstance);
@@ -350,77 +337,57 @@ public class SkiaMapperControl : SKControl {
         var canvas = e.Surface.Canvas;
         int w = e.Info.Width;
         int h = e.Info.Height;
-
         canvas.Clear(SKColors.White);
-
-        // Declared ONCE cleanly for the entire method scope
-        float centerLeft = leftTreeWidth;
+        float centerLeft = leftTreeWidth;  // Declared ONCE cleanly for the entire method scope
         float centerRight = w - rightTreeWidth;
         float mainContentHeight = h - logPanelHeight;
-
+        using var bgPaint = new SKPaint(); 
         // 1. Draw Viewport Background Panels
-        using var bgPaint = new SKPaint();
         bgPaint.Color = SKColors.GhostWhite;
         canvas.DrawRect(0, 0, leftTreeWidth, mainContentHeight, bgPaint);
         canvas.DrawRect(centerRight, 0, rightTreeWidth, mainContentHeight, bgPaint);
-
         bgPaint.Color = new SKColor(245, 247, 250);
         canvas.DrawRect(centerLeft, 0, centerRight - centerLeft, mainContentHeight, bgPaint);
-
         bgPaint.Color = new SKColor(30, 30, 30);
         canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
-
+        float currentY = 10f;   
         // 2. Draw Trees
-        float currentY = 10f;
         if (SourceRoot != null) RenderTreeElement(canvas, SourceRoot, 15f, ref currentY, true);
-
         currentY = 10f;
         if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentY, false);
-
+        RenderActiveGridFunctoids(canvas, centerLeft); 
         // 3. Draw Placed Canvas Grid Functoids
-        RenderActiveGridFunctoids(canvas, centerLeft);
-
+        RenderFunctoidToolPalette(canvas);  
         // 4. Draw Floating Tool Palette Window
-        RenderFunctoidToolPalette(canvas);
-
+        bgPaint.Color = SKColors.DarkGray; 
         // 5. Draw Layout Grid Splitters
-        bgPaint.Color = SKColors.DarkGray;
         canvas.DrawRect(leftTreeWidth - 2, 0, SplitterWidth, mainContentHeight, bgPaint);
         canvas.DrawRect(centerRight - 3, 0, SplitterWidth, mainContentHeight, bgPaint);
         canvas.DrawRect(0, mainContentHeight - 2, w, SplitterWidth, bgPaint);
-
-        // 6. Draw Permanent Map Wire Connections
         RenderMapConnections(canvas);
-
-        // 7. Draw Live Dragging Connection Line Link
-        if (dragSource != null) {
+        // 6. Draw Permanent Map Wire Connections
+        if (dragSource != null) { 
+            // 7. Draw Live Dragging Connection Line Link
             using var dragPaint = new SKPaint { Color = SKColors.Orange, StrokeWidth = 2f, IsAntialias = true, Style = SKPaintStyle.Stroke };
-
             using var previewPath = new SKPath();
             previewPath.MoveTo(currentDragPoint.X, currentDragPoint.Y);
-
             // FIXED: Using lastMousePos (cached from MouseMove) instead of e.X/e.Y
             float controlOffset = Math.Max(30f, Math.Abs(lastMousePos.X - currentDragPoint.X) * 0.5f);
             float cp1X = currentDragPoint.X + controlOffset;
             float cp1Y = currentDragPoint.Y;
             float cp2X = lastMousePos.X - controlOffset;
             float cp2Y = lastMousePos.Y;
-
             previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, lastMousePos.X, lastMousePos.Y);
             canvas.DrawPath(previewPath, dragPaint);
         }
-
-        // 8. Draw Ghost Palette Item Preview Box
-        if (draggingPaletteFunctoid != null) {
+        if (draggingPaletteFunctoid != null) {  
+            // 8. Draw Ghost Palette Item Preview Box
             using var ghostBoxPaint = new SKPaint { Color = new SKColor(52, 152, 219, 160), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var ghostBorderPaint = new SKPaint { Color = new SKColor(41, 128, 185), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
             using var ghostTextPaint = new SKPaint { Color = SKColors.White, TextSize = 11f, IsAntialias = true, TextAlign = SKTextAlign.Center };
-
-            // FIXED: Using lastMousePos instead of e.X/e.Y
-            float ghostX = lastMousePos.X - paletteItemDragOffset.X;
+            float ghostX = lastMousePos.X - paletteItemDragOffset.X; // FIXED: Using lastMousePos instead of e.X/e.Y
             float ghostY = lastMousePos.Y - paletteItemDragOffset.Y;
             SKRect ghostRect = new SKRect(ghostX, ghostY, ghostX + 110f, ghostY + 36f);
-
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBoxPaint);
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBorderPaint);
             canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, ghostTextPaint);
@@ -449,6 +416,87 @@ public class SkiaMapperControl : SKControl {
         if (node.IsExpanded) {
             foreach (var child in node.Children) {
                 RenderTreeElement(canvas, child, x + indentSpacing, ref currentY, isSourceTree);
+            }
+        }
+    }
+    private void RenderFunctoidParameterConnections(SKCanvas canvas, float centerLeft) {
+        using var wirePaint = new SKPaint {
+            Color = new SKColor(52, 152, 219, 220), // Clean slate blue connection wire
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 1.75f,
+            IsAntialias = true,
+            PathEffect = SKPathEffect.CreateDash(new float[] { 4f, 4f }, 0f) // Subtle dash to indicate execution routing pass
+        };
+
+        using var jointPaint = new SKPaint {
+            Color = new SKColor(41, 128, 185),
+            Style = SKPaintStyle.Fill,
+            IsAntialias = true
+        };
+
+        // Loop through every live canvas element to look for assigned inbound parameters
+        foreach (var targetInstance in ActiveFunctoids) {
+            if (targetInstance.ConnectedParameters == null) continue;
+
+            //int maxParams = targetInstance.Definition?.InputParameters?.Count ?? 1;
+            int maxParams = targetInstance.Definition?.InputParametersCount ?? 1; // <-- REVISED: Use direct count property for efficiency
+
+
+            float sectorHeight = targetInstance.Height / maxParams;
+            float targetAbsoluteX = centerLeft + targetInstance.X;
+
+            foreach (var kvp in targetInstance.ConnectedParameters) {
+                int paramIndex = kvp.Key;
+                FunctoidParameter parameter = kvp.Value;
+
+                if (parameter.SourceType == ParameterSourceType.Unlinked) continue;
+
+                // 1. Calculate Target Coordinates (Left edge of the box, centered vertically inside its assigned slot sector)
+                float targetX = targetAbsoluteX;
+                float targetY = targetInstance.Y + (paramIndex * sectorHeight) + (sectorHeight / 2f);
+
+                float sourceX = 0f;
+                float sourceY = 0f;
+                bool validSourceFound = false;
+
+                // 2. Resolve Source Coordinates based on connection origin variant
+                if (parameter.SourceType == ParameterSourceType.SourceSchemaNode) {
+                    // Find where the tree node layout tracker recorded its coordinates during the tree draw pass
+                    SchemaNode? schemaNode = FindNodeByPath(SourceRoot, parameter.SourceNodePath);
+                    if (schemaNode != null) {
+                        sourceX = leftTreeWidth - 16f; // Origin point matching the tree layout anchor bounds
+                        sourceY = schemaNode.LastRenderedY;
+                        validSourceFound = true;
+                    }
+                } else if (parameter.SourceType == ParameterSourceType.FunctoidOutput) {
+                    // Find the predecessor block on the active visual surface
+                    var sourceInstance = ActiveFunctoids.FirstOrDefault(f => f.Id == parameter.SourceFunctoidId);
+                    if (sourceInstance != null) {
+                        sourceX = centerLeft + sourceInstance.X + sourceInstance.Width; // Originates at the center-right boundary
+                        sourceY = sourceInstance.Y + (sourceInstance.Height / 2f);
+                        validSourceFound = true;
+                    }
+                }
+
+                // 3. Draw the Cubic Bezier Routing Wire
+                if (validSourceFound) {
+                    using var path = new SKPath();
+                    path.MoveTo(sourceX, sourceY);
+
+                    // Calculate smooth visual control vectors based on layout distance
+                    float controlOffset = Math.Max(30f, Math.Abs(targetX - sourceX) * 0.5f);
+                    path.CubicTo(
+                        sourceX + controlOffset, sourceY, // First Bezier handle
+                        targetX - controlOffset, targetY, // Second Bezier handle
+                        targetX, targetY                  // Destination
+                    );
+
+                    canvas.DrawPath(path, wirePaint);
+
+                    // Draw tiny terminal joint nubs for crisp look and feel
+                    canvas.DrawCircle(sourceX, sourceY, 3f, jointPaint);
+                    canvas.DrawCircle(targetX, targetY, 3f, jointPaint);
+                }
             }
         }
     }
@@ -748,7 +796,7 @@ public class SkiaMapperControl : SKControl {
             // 1. EVALUATE START POINT (Where is the line coming from?)
             // ALIGNED: Using ConnectionEndpointType.Functoid from MappingProject.cs
             if (conn.Source.Type == ConnectionEndpointType.Functoid && conn.Source.FunctoidInstanceId != null) {
-             
+
                 // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
                 var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Source.FunctoidInstanceId);
                 if (instance != null) {
@@ -765,7 +813,7 @@ public class SkiaMapperControl : SKControl {
             // 2. EVALUATE END POINT (Where is the line going to?)
             // ALIGNED: Using ConnectionEndpointType.Functoid from MappingProject.cs
             if (conn.Target.Type == ConnectionEndpointType.Functoid && conn.Target.FunctoidInstanceId != null) {
-                      // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
+                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
                 var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Target.FunctoidInstanceId);
                 if (instance != null) {
                     endX = centerLeft + instance.X; // Ends at left edge of functoid
@@ -839,7 +887,6 @@ public class SkiaMapperControl : SKControl {
         }
         return null;
     }
-
     #region  Modularized MouseDown  Intercept Engine Block Helpers
 
     private void ProcessLeftClickToolPalette(MouseEventArgs e) {
@@ -884,9 +931,9 @@ public class SkiaMapperControl : SKControl {
                         if (ofd.ShowDialog() == DialogResult.OK) {
                             LoadConfiguration(File.ReadAllText(ofd.FileName));
                             isCanvasDirty = false;
-                           this.FindForm().Text = $"{this.FindForm().Text} -  Working on {ofd.FileName}";
-                           
-                           
+                            this.FindForm().Text = $"{this.FindForm().Text} -  Working on {ofd.FileName}";
+
+
                             Invalidate();
                         }
                     }
@@ -1046,7 +1093,6 @@ public class SkiaMapperControl : SKControl {
     }
 
     #endregion Modularized MouseDown  Intercept Engine Block Helpers
-
     protected override void OnMouseDown(MouseEventArgs e) {
         lastMousePos = new PointF(e.X, e.Y);
         this.Focus(); // Retain instant canvas keyboard capture
@@ -1244,7 +1290,6 @@ public class SkiaMapperControl : SKControl {
         sb.AppendLine("}");
         return sb.ToString();
     }
-
     private static string ExtractMethodNameFromTemplate(string template, string functoidName, int functoidId) {
         if (string.IsNullOrWhiteSpace(template)) {
             // Fallback clean name alpha-numeric format strip
@@ -1270,7 +1315,6 @@ public class SkiaMapperControl : SKControl {
 
         return $"Transform_{functoidName.Replace(" ", "")}_{functoidId}";
     }
-
     protected override void OnMouseUp(MouseEventArgs e) {
         float centerLeft = leftTreeWidth;
         float centerRight = Width - rightTreeWidth;
@@ -1385,30 +1429,24 @@ public class SkiaMapperControl : SKControl {
             ActiveFunctoids = this.ActiveFunctoids.ToList(),
             Connections = this.Connections.ToList()
         };
-
         var serializer = new XmlSerializer(typeof(MappingProjectState));
         using var stringWriter = new StringWriter();
         using var xmlWriter = XmlWriter.Create(stringWriter, new XmlWriterSettings { Indent = true });
-
         serializer.Serialize(xmlWriter, state);
         return stringWriter.ToString();
     }
-
     /// <summary>
     /// Deserializes an XML map configuration string and completely rehydrates the canvas layout.
     /// </summary>
     public void LoadConfiguration(string xmlContent) {
         if (string.IsNullOrWhiteSpace(xmlContent)) return;
-
         try {
             var serializer = new XmlSerializer(typeof(MappingProjectState));
             using var stringReader = new StringReader(xmlContent);
-
             if (serializer.Deserialize(stringReader) is MappingProjectState loadedState) {
                 // Clear existing layout records
                 this.ActiveFunctoids.Clear();
                 this.Connections.Clear();
-
                 // Rehydrate collections
                 if (loadedState.ActiveFunctoids != null) {
                     // --- REVISED: Use a loop to populate the ObservableCollection ---
@@ -1440,5 +1478,31 @@ public class SkiaMapperControl : SKControl {
             throw;
         }
     }
-
+    public void AssignInputParameter(FunctoidInstance targetFunctoid, ConnectionEndpoint dragSource, float dropY) {
+        // 1. Determine how many parameters this functoid can accept
+        // (Fallback to 1 if not explicitly declared in your XML definition asset)
+        int maxParams = targetFunctoid.Definition?.InputParametersCount ?? 1;
+        // 2. Calculate which parameter slot index the user was targeting based on drop height
+        float relativeY = dropY - targetFunctoid.Y;
+        float sectorHeight = targetFunctoid.Height / maxParams;
+        int targetIndex = (int)(relativeY / sectorHeight);
+        // Guard bounds safety
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex >= maxParams) targetIndex = maxParams - 1;
+        // 3. Build the parameter assignment descriptor
+        var parameterAssignment = new FunctoidParameter {
+            Index = targetIndex
+        };
+        if (dragSource.Type == ConnectionEndpointType.SourceNode) {
+            parameterAssignment.SourceType = ParameterSourceType.SourceSchemaNode;
+            parameterAssignment.SourceNodePath = dragSource.NodePath;
+        } else if (dragSource.Type == ConnectionEndpointType.Functoid) {
+            // Prevent cyclic self-linking loops
+            if (dragSource.FunctoidInstanceId == targetFunctoid.Id) return;
+            parameterAssignment.SourceType = ParameterSourceType.FunctoidOutput;
+            parameterAssignment.SourceFunctoidId = dragSource.FunctoidInstanceId;
+        }
+        // 4. Save or overwrite the slot connection mapping state
+        targetFunctoid.ConnectedParameters[targetIndex] = parameterAssignment;
+    }
 }
