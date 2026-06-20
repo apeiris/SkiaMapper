@@ -839,248 +839,262 @@ public class SkiaMapperControl : SKControl {
         }
         return null;
     }
-    #region OnMouseDown 842
-    protected override void OnMouseDown(MouseEventArgs e) {
-        lastMousePos = new PointF(e.X, e.Y);
-        float mainContentHeight = Height - logPanelHeight;
-        float centerLeft = leftTreeWidth;
-        float centerRight = Width - rightTreeWidth;
-        this.Focus();  // Fix focus so keyboard events register instantly when the user clicks the control canvas
 
-        // --- OUTER ROUTING LEVEL: ACTION ROUTED BY CLICK PRIORITY ---
-        switch (e.Button) {
+    #region  Modularized MouseDown  Intercept Engine Block Helpers
 
-            // ==========================================
-            // LEFT MOUSE BUTTON: INTERACTION AND DRAGGING
-            // ==========================================
-            case MouseButtons.Left:
-                #region Left Click: Tool Palette Interactions Intercept
-                if (paletteBounds.Contains(e.X, e.Y)) {
-                    var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
+    private void ProcessLeftClickToolPalette(MouseEventArgs e) {
+        var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
 
-                    if (headerRect.Contains(e.X, e.Y)) {
-                        switch (e.Location) {   // PATTERN MATCH: PALETTE HEADER BUTTON TRAPS
-                                                // --- ADDITION: Execute XSLT Hit-Test Slot ---
-                            case var loc when executeXsltBtnRect.Contains(loc.X, loc.Y):
-                                BtnExecuteTransform_Click(this, EventArgs.Empty);
-                                return;
+        // --- SUB-ZONE ROUTING: HEADER TRAPS ---
+        if (headerRect.Contains(e.X, e.Y)) {
+            switch (e.Location) {
+                case var loc when executeXsltBtnRect.Contains(loc.X, loc.Y):
+                    BtnExecuteTransform_Click(this, EventArgs.Empty);
+                    return;
 
-                            case var loc when clearBtnRect.Contains(loc.X, loc.Y):
-                                var choice = MessageBox.Show(
-                                    "Are you sure you want to completely clear the canvas? All functoids and mapping traces will be deleted.",
-                                    "Clear Canvas",
-                                    MessageBoxButtons.YesNo,
-                                    MessageBoxIcon.Warning
-                                );
-                                if (choice == DialogResult.Yes) {
-                                    // Reactive collections automatically track dirty state and invoke Invalidate() via OnCanvasStructureChanged
-                                    ActiveFunctoids.Clear();
-                                    Connections.Clear();
-                                    dragSource = null;
-                                    draggingCanvasInstance = null;
-                                    Invalidate();
-                                }
-                                return;
-
-                            case var loc when saveBtnRect.Contains(loc.X, loc.Y):
-                                using (var sfd = new SaveFileDialog {
-                                    Filter = "XML Files (*.xml)|*.xml",
-                                    DefaultExt = "xml",
-                                    AddExtension = true,
-                                    Title = "Save Mapping Schema"
-                                }) {
-                                    if (sfd.ShowDialog() == DialogResult.OK) {
-                                        string xmlData = SaveConfiguration();
-                                        File.WriteAllText(sfd.FileName, xmlData);
-                                        isCanvasDirty = false; // Updated to public property
-                                        Invalidate();
-                                    }
-                                }
-                                return;
-
-                            case var loc when loadBtnRect.Contains(loc.X, loc.Y):
-                                using (var ofd = new OpenFileDialog {
-                                    Filter = "XML Files (*.xml)|*.xml",
-                                    DefaultExt = "xml",
-                                    Title = "Load Mapping Schema"
-                                }) {
-                                    if (ofd.ShowDialog() == DialogResult.OK) {
-                                        string xmlData = File.ReadAllText(ofd.FileName);
-                                        LoadConfiguration(xmlData);
-                                        isCanvasDirty = false; // Updated to public property
-                                        Invalidate();
-                                    }
-                                }
-                                return;
-
-                            case var loc when loc.X > paletteBounds.Right - 28f:
-                                isPaletteExpanded = !isPaletteExpanded;
-                                Invalidate();
-                                return;
-
-                            default:
-                                isDraggingPalette = true;
-                                paletteDragOffset = new PointF(e.X - paletteBounds.Left, e.Y - paletteBounds.Top);
-                                Capture = true;
-                                return;
-                        }
+                case var loc when clearBtnRect.Contains(loc.X, loc.Y):
+                    var choice = MessageBox.Show(
+                        "Are you sure you want to completely clear the canvas? All functoids and mapping traces will be deleted.",
+                        "Clear Canvas",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning
+                    );
+                    if (choice == DialogResult.Yes) {
+                        ActiveFunctoids.Clear();
+                        Connections.Clear();
+                        dragSource = null;
+                        draggingCanvasInstance = null;
+                        isCanvasDirty = false;
+                        Invalidate();
                     }
+                    return;
 
-                    if (isPaletteExpanded) {
-                        float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
-
-                        // A. Scrollbar Track Intercept
-                        if (maxToolboxContentHeight > viewableHeight) {
-                            float scrollbarWidth = 5f;
-                            float trackLeft = paletteBounds.Right - scrollbarWidth - 6f;
-                            float trackTop = paletteBounds.Top + PaletteHeaderHeight + 6f;
-                            SKRect scrollHitRect = new SKRect(trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
-                            if (scrollHitRect.Contains(e.X, e.Y)) {
-                                isDraggingToolboxScrollbar = true;
-                                toolboxScrollbarDragStartY = e.Y;
-                                toolboxScrollbarDragStartScrollY = toolboxVirtualScrollY;
-                                Capture = true;
-                                return;
-                            }
-                        }
-
-                        // B. Category Collapse Headers
-                        foreach (var category in FunctoidCategories) {
-                            if (category.LastRenderedHeaderBounds.Contains(e.X, e.Y)) {
-                                category.IsExpanded = !category.IsExpanded;
-                                maxToolboxContentHeight = CalculateTotalToolboxContentHeight();
-                                float minScrollY = -(maxToolboxContentHeight - viewableHeight);
-                                if (minScrollY > 0) minScrollY = 0;
-                                toolboxVirtualScrollY = Math.Clamp(toolboxVirtualScrollY, minScrollY, 0f);
-                                Invalidate();
-                                return;
-                            }
-                        }
-
-                        // C. Grab Item Row Handler
-                        foreach (var itemEntry in renderedItemHitboxes) {
-                            if (itemEntry.Value.Contains(e.X, e.Y)) {
-                                draggingPaletteFunctoid = itemEntry.Key;
-                                paletteItemDragOffset = new PointF(55f, 18f);
-                                Capture = true;
-                                Invalidate();
-                                return;
-                            }
+                case var loc when saveBtnRect.Contains(loc.X, loc.Y):
+                    using (var sfd = new SaveFileDialog { Filter = "XML Files (*.xml)|*.xml", DefaultExt = "xml", AddExtension = true, Title = "Save Mapping Schema" }) {
+                        if (sfd.ShowDialog() == DialogResult.OK) {
+                            File.WriteAllText(sfd.FileName, SaveConfiguration());
+                            isCanvasDirty = false;
+                            Invalidate();
                         }
                     }
                     return;
-                }
-                #endregion Left Click: Tool Palette Interactions Intercept
 
-                #region Left Click: Canvas Functoid Intercept
-                if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
-                    for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
-                        var instance = ActiveFunctoids[i];
-                        float absoluteX = centerLeft + instance.X;
-                        SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
-
-                        if (itemRect.Contains(e.X, e.Y)) {
-                            if (e.X > itemRect.MidX) { // Right Half: Output link line creation
-                                dragSource = new ConnectionEndpoint {
-                                    Type = ConnectionEndpointType.Functoid,
-                                    FunctoidInstanceId = instance.Id
-                                };
-                                currentDragPoint = new PointF(itemRect.Right, itemRect.MidY);
-                            } else { // Left Half: Canvas positioning drag
-                                draggingCanvasInstance = instance;
-                                canvasInstanceDragOffset = new PointF(e.X - absoluteX, e.Y - instance.Y);
-                            }
-
-                            Capture = true;
+                case var loc when loadBtnRect.Contains(loc.X, loc.Y):
+                    using (var ofd = new OpenFileDialog { Filter = "XML Files (*.xml)|*.xml", DefaultExt = "xml", Title = "Load Mapping Schema" }) {
+                        if (ofd.ShowDialog() == DialogResult.OK) {
+                            LoadConfiguration(File.ReadAllText(ofd.FileName));
+                            isCanvasDirty = false;
+                           this.FindForm().Text = $"{this.FindForm().Text} -  Working on {ofd.FileName}";
+                           
+                           
                             Invalidate();
-                            return;
                         }
                     }
-                }
-                #endregion Left Click: Canvas Functoid Intercept
+                    return;
 
-                #region Left Click: Source Tree Node Intercept
-                if (e.X < leftTreeWidth && e.Y < mainContentHeight && SourceRoot != null) {
-                    SchemaNode? targetedNode = FindNodeAtPosition(SourceRoot, e.Y);
-                    if (targetedNode != null) {
-                        dragSource = new ConnectionEndpoint {
-                            Type = ConnectionEndpointType.SourceNode,
-                            NodePath = targetedNode.Name
-                        };
-                        currentDragPoint = new PointF(leftTreeWidth - 25f, targetedNode.LastRenderedY);
-                        Capture = true;
-                        Invalidate();
-                        return;
-                    }
-                }
-                #endregion Left Click: Source Tree Node Intercept
-
-                #region Left Click: Layout Splitter Slices
-                switch (e) {
-                    case var m when Math.Abs(m.Y - mainContentHeight) < SplitterWidth:
-                        isResizingLog = true;
-                        Capture = true;
-                        return;
-                    case var m when Math.Abs(m.X - leftTreeWidth) < SplitterWidth:
-                        isResizingLeft = true;
-                        Capture = true;
-                        return;
-                    case var m when Math.Abs(m.X - centerRight) < SplitterWidth:
-                        isResizingRight = true;
-                        Capture = true;
-                        return;
-                }
-                #endregion Left Click: Layout Splitter Slices
-
-                #region Left Click: Wire Connection Trace Select
-                var leftHitConnection = FindConnectionAtPosition(e.X, e.Y);
-                if (leftHitConnection != selectedConnection) {
-                    selectedConnection = leftHitConnection;
-                    if (leftHitConnection != null) selectedCanvasInstance = null;
-
+                case var loc when loc.X > paletteBounds.Right - 28f:
+                    isPaletteExpanded = !isPaletteExpanded;
                     Invalidate();
+                    return;
+
+                default:
+                    isDraggingPalette = true;
+                    paletteDragOffset = new PointF(e.X - paletteBounds.Left, e.Y - paletteBounds.Top);
+                    Capture = true;
+                    return;
+            }
+        }
+
+        // --- SUB-ZONE ROUTING: EXPANDED BODY LIST INTERACTION ---
+        if (isPaletteExpanded) {
+            float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
+
+            // A. Virtual Scrollbar Track Check
+            if (maxToolboxContentHeight > viewableHeight) {
+                float scrollbarWidth = 5f;
+                float trackLeft = paletteBounds.Right - scrollbarWidth - 6f;
+                float trackTop = paletteBounds.Top + PaletteHeaderHeight + 6f;
+                SKRect scrollHitRect = new SKRect(trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
+                if (scrollHitRect.Contains(e.X, e.Y)) {
+                    isDraggingToolboxScrollbar = true;
+                    toolboxScrollbarDragStartY = e.Y;
+                    toolboxScrollbarDragStartScrollY = toolboxVirtualScrollY;
+                    Capture = true;
+                    return;
                 }
-                #endregion Left Click: Wire Connection Trace Select
-                break;
+            }
 
-            // ==========================================
-            // RIGHT MOUSE BUTTON: CONTEXT MENUS ONLY
-            // ==========================================
-            case MouseButtons.Right:
-                // Drop out completely if click happens inside floating tool window container (Bypasses drag handles)
-                if (paletteBounds.Contains(e.X, e.Y)) return;
-
-                #region Right Click: Canvas Functoid Context Menu
-                if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
-                    for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
-                        var instance = ActiveFunctoids[i];
-                        float absoluteX = centerLeft + instance.X;
-                        SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
-
-                        if (itemRect.Contains(e.X, e.Y)) {
-                            contextTargetInstance = instance;
-                            functoidContextMenu.Show(this, e.Location);
-                            return;
-                        }
-                    }
-                }
-                #endregion Right Click: Canvas Functoid Context Menu
-
-                #region Right Click: Wire Trace Context Menu
-                var rightHitConnection = FindConnectionAtPosition(e.X, e.Y);
-                if (rightHitConnection != null) {
-                    contextTargetConnection = rightHitConnection;
-                    selectedConnection = rightHitConnection;
-                    selectedCanvasInstance = null;
+            // B. Category Expand/Collapse Accordion Header Strip Checks
+            foreach (var category in FunctoidCategories) {
+                if (category.LastRenderedHeaderBounds.Contains(e.X, e.Y)) {
+                    category.IsExpanded = !category.IsExpanded;
+                    maxToolboxContentHeight = CalculateTotalToolboxContentHeight();
+                    float minScrollY = -(maxToolboxContentHeight - viewableHeight);
+                    if (minScrollY > 0) minScrollY = 0;
+                    toolboxVirtualScrollY = Math.Clamp(toolboxVirtualScrollY, minScrollY, 0f);
                     Invalidate();
-                    connectionContextMenu?.Show(this, e.Location);
+                    return;
                 }
-                #endregion Right Click: Wire Trace Context Menu
-                break;
+            }
+
+            // C. Row Grab Item Drag Handlers
+            foreach (var itemEntry in renderedItemHitboxes) {
+                if (itemEntry.Value.Contains(e.X, e.Y)) {
+                    draggingPaletteFunctoid = itemEntry.Key;
+                    paletteItemDragOffset = new PointF(55f, 18f); // Center node snapping placement offset
+                    Capture = true;
+                    Invalidate();
+                    return;
+                }
+            }
         }
     }
 
-    #endregion 1083 nMouseDown
+    private bool ProcessLeftClickCanvasFunctoids(MouseEventArgs e, float centerLeft) {
+        for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
+            var instance = ActiveFunctoids[i];
+            float absoluteX = centerLeft + instance.X;
+            SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
+
+            if (itemRect.Contains(e.X, e.Y)) {
+                if (e.X > itemRect.MidX) { // Right Side: Map connection wire drag initialization
+                    dragSource = new ConnectionEndpoint {
+                        Type = ConnectionEndpointType.Functoid,
+                        FunctoidInstanceId = instance.Id
+                    };
+                    currentDragPoint = new PointF(itemRect.Right, itemRect.MidY);
+                } else { // Left Side: Interactive canvas repositioning displacement drag
+                    draggingCanvasInstance = instance;
+                    canvasInstanceDragOffset = new PointF(e.X - absoluteX, e.Y - instance.Y);
+                }
+
+                Capture = true;
+                Invalidate();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool ProcessLeftClickSourceTree(MouseEventArgs e) {
+        SchemaNode? targetedNode = FindNodeAtPosition(SourceRoot, e.Y);
+        if (targetedNode != null) {
+            dragSource = new ConnectionEndpoint {
+                Type = ConnectionEndpointType.SourceNode,
+                NodePath = targetedNode.Name
+            };
+            currentDragPoint = new PointF(leftTreeWidth - 25f, targetedNode.LastRenderedY);
+            Capture = true;
+            Invalidate();
+            return true;
+        }
+        return false;
+    }
+
+    private bool ProcessLeftClickLayoutSplitters(MouseEventArgs e, float mainContentHeight, float centerLeft, float centerRight) {
+        if (Math.Abs(e.Y - mainContentHeight) < SplitterWidth) {
+            isResizingLog = true;
+            Capture = true;
+            return true;
+        }
+        if (Math.Abs(e.X - centerLeft) < SplitterWidth) {
+            isResizingLeft = true;
+            Capture = true;
+            return true;
+        }
+        if (Math.Abs(e.X - centerRight) < SplitterWidth) {
+            isResizingRight = true;
+            Capture = true;
+            return true;
+        }
+        return false;
+    }
+
+    private void ProcessLeftClickWireSelection(MouseEventArgs e) {
+        var leftHitConnection = FindConnectionAtPosition(e.X, e.Y);
+        if (leftHitConnection != selectedConnection) {
+            selectedConnection = leftHitConnection;
+            if (leftHitConnection != null) selectedCanvasInstance = null;
+            Invalidate();
+        }
+    }
+
+    private bool ProcessRightClickCanvasFunctoids(MouseEventArgs e, float centerLeft) {
+        for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
+            var instance = ActiveFunctoids[i];
+            float absoluteX = centerLeft + instance.X;
+            SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
+
+            if (itemRect.Contains(e.X, e.Y)) {
+                contextTargetInstance = instance;
+                functoidContextMenu.Show(this, e.Location);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void ProcessRightClickWireSelection(MouseEventArgs e) {
+        var rightHitConnection = FindConnectionAtPosition(e.X, e.Y);
+        if (rightHitConnection != null) {
+            contextTargetConnection = rightHitConnection;
+            selectedConnection = rightHitConnection;
+            selectedCanvasInstance = null;
+            Invalidate();
+            connectionContextMenu?.Show(this, e.Location);
+        }
+    }
+
+    #endregion Modularized MouseDown  Intercept Engine Block Helpers
+
+    protected override void OnMouseDown(MouseEventArgs e) {
+        lastMousePos = new PointF(e.X, e.Y);
+        this.Focus(); // Retain instant canvas keyboard capture
+        // Calculate structural metrics used across layout zones
+        float mainContentHeight = Height - logPanelHeight;
+        float centerLeft = leftTreeWidth;
+        float centerRight = Width - rightTreeWidth;
+        switch (e.Button) {
+            case MouseButtons.Left:
+                // 1. Priority Intercept: Tool Palette Floating Overlay Window
+                if (paletteBounds.Contains(e.X, e.Y)) {
+                    ProcessLeftClickToolPalette(e);
+                    return;
+                }
+
+                // 2. Priority Intercept: Canvas Interactive Functoid Instances
+                if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
+                    if (ProcessLeftClickCanvasFunctoids(e, centerLeft)) return;
+                }
+
+                // 3. Priority Intercept: Source Schema Tree Panel Nodes
+                if (e.X < leftTreeWidth && e.Y < mainContentHeight && SourceRoot != null) {
+                    if (ProcessLeftClickSourceTree(e)) return;
+                }
+
+                // 4. Priority Intercept: Resizing UI Layout Splitter Slices
+                if (ProcessLeftClickLayoutSplitters(e, mainContentHeight, centerLeft, centerRight)) {
+                    return;
+                }
+
+                // 5. Fallback: Edge-Wire Connection Trace Intersection Selection
+                ProcessLeftClickWireSelection(e);
+                break;
+
+            case MouseButtons.Right:
+                // Drop out completely if context click happens inside floating tool window container
+                if (paletteBounds.Contains(e.X, e.Y)) return;
+
+                // 1. Right Click: Canvas Functoid Nodes Context Menu
+                if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
+                    if (ProcessRightClickCanvasFunctoids(e, centerLeft)) return;
+                }
+
+                // 2. Right Click: Vector Wire Connection Lines Context Menu
+                ProcessRightClickWireSelection(e);
+                break;
+        }
+    }
     protected override void OnKeyDown(KeyEventArgs e) {
         base.OnKeyDown(e);
 
