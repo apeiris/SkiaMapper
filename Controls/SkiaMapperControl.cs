@@ -1069,7 +1069,7 @@ public class SkiaMapperControl : SKControl {
                         if (ofd.ShowDialog() == DialogResult.OK) {
                             LoadConfiguration(File.ReadAllText(ofd.FileName));
                             isCanvasDirty = false;
-                            this.FindForm().Text = $"{this.FindForm().Text} -  Working on {ofd.FileName}";
+                            this.FindForm()?.Text = $"{this.FindForm()?.Text} -  Working on {ofd.FileName}";
 
 
                             Invalidate();
@@ -1733,7 +1733,7 @@ public class SkiaMapperControl : SKControl {
                         }
                     }
 
-                    Connections.Add(new MappingConnection {
+                    Connections?.Add(new MappingConnection {
                         Source = dragSource,
                         Target = dragTarget
                     });
