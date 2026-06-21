@@ -20,11 +20,11 @@ namespace SkiaMapper.Forms {
             InitializeComponent();
 
             // Automatically binds the pre-built template script or custom modifications cleanly
-            txtScript.Text = !string.IsNullOrWhiteSpace(instance.CustomScriptBody)
+            txtScript?.Text = !string.IsNullOrWhiteSpace(instance.CustomScriptBody)
                 ? instance.CustomScriptBody
                 : "// No default script asset could be compiled.";
 
-            txtMethodName.Text = !string.IsNullOrWhiteSpace(instance.CustomMethodName)
+            txtMethodName?.Text = !string.IsNullOrWhiteSpace(instance.CustomMethodName)
                 ? instance.CustomMethodName
                 : "TransformMethod";
         }

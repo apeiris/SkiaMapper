@@ -626,7 +626,7 @@ public class SkiaMapperControl : SKControl {
 
         foreach (var instance in ActiveFunctoids) {
             float absX = centerLeft + instance.X;
-            SKRect rect = new SKRect(absX, instance.Y, absX + instance.Width, instance.Y + instance.Height);
+            SKRect rect = new (absX, instance.Y, absX + instance.Width, instance.Y + instance.Height);
 
             // 1. Fetch the raw background category color profile
             SKColor catColor = GetFunctoidCategoryColor(instance);
@@ -640,7 +640,7 @@ public class SkiaMapperControl : SKControl {
 
             // 4. Draw the vertical category accent bar strictly aligned to the left inner boundary
             float accentBarWidth = 5f;
-            SKRect accentBarRect = new SKRect(rect.Left, rect.Top, rect.Left + accentBarWidth, rect.Bottom);
+            SKRect accentBarRect = new (rect.Left, rect.Top, rect.Left + accentBarWidth, rect.Bottom);
 
             canvas.Save();
             using (var clipPath = new SKPath()) {
@@ -829,7 +829,7 @@ public class SkiaMapperControl : SKControl {
             float virtualTrackingY = startYPosition + toolboxVirtualScrollY;
 
             foreach (var category in FunctoidCategories) {
-                SKRect catHeaderRect = new SKRect(leftPadding, virtualTrackingY, leftPadding + usableItemWidth, virtualTrackingY + categoryHeaderHeight);
+                SKRect catHeaderRect = new (leftPadding, virtualTrackingY, leftPadding + usableItemWidth, virtualTrackingY + categoryHeaderHeight);
                 category.LastRenderedHeaderBounds = catHeaderRect;
 
                 if (catHeaderRect.Bottom > contentClipArea.Top && catHeaderRect.Top < contentClipArea.Bottom) {
@@ -845,7 +845,7 @@ public class SkiaMapperControl : SKControl {
                     foreach (var functoid in AvailableFunctoids) {
                         if (functoid.CategoryId != category.Id) continue;
 
-                        SKRect rowRect = new SKRect(leftPadding + 6f, virtualTrackingY, leftPadding + usableItemWidth - 6f, virtualTrackingY + itemHeight);
+                        SKRect rowRect = new (leftPadding + 6f, virtualTrackingY, leftPadding + usableItemWidth - 6f, virtualTrackingY + itemHeight);
                         renderedItemHitboxes[functoid] = rowRect;
 
                         if (rowRect.Bottom > contentClipArea.Top && rowRect.Top < contentClipArea.Bottom) {
@@ -922,7 +922,7 @@ public class SkiaMapperControl : SKControl {
     }
 
     // Deep tree layout search coordinator
-    private bool FindNodeYRecursive(SchemaNode node, string targetPath, ref float currentY) {
+    private static bool FindNodeYRecursive(SchemaNode node, string targetPath, ref float currentY) {
         // Check if we hit the targeted element row item name
         if (node.Name == targetPath) {
             // Calculate the center point of the 24px/20px high list item row box block
@@ -974,7 +974,7 @@ public class SkiaMapperControl : SKControl {
     }
 
     #endregion Paint and Render methods
-    private SKColor GetCategoryColor(string colorName) {
+    private static SKColor GetCategoryColor(string colorName) {
         if (string.IsNullOrEmpty(colorName)) return SKColors.LightGray;
 
         // Resolves standard system web color signatures dynamically (e.g., "Brown", "LightBlue")
@@ -987,7 +987,7 @@ public class SkiaMapperControl : SKControl {
 
         return SKColors.LightGray;
     }
-    private float FindNodeY(SchemaNode? root, string path) {
+    private static float FindNodeY(SchemaNode? root, string path) {
         if (root == null) return -1;
         if (root.Name == path) return root.LastRenderedY;
 
@@ -997,7 +997,7 @@ public class SkiaMapperControl : SKControl {
         }
         return -1;
     }
-    private SchemaNode? FindNodeAtPosition(SchemaNode node, float mouseCodeY) {
+    private static SchemaNode? FindNodeAtPosition(SchemaNode node, float mouseCodeY) {
         float halfHeight = node.LastRenderedHeight / 2f;
         if (mouseCodeY >= node.LastRenderedY - halfHeight && mouseCodeY <= node.LastRenderedY + halfHeight) {
             return node;
@@ -1011,7 +1011,7 @@ public class SkiaMapperControl : SKControl {
         }
         return null;
     }
-    private SchemaNode? FindDestinationNodeAtPosition(SchemaNode node, float mouseCodeY) {
+    private static SchemaNode? FindDestinationNodeAtPosition(SchemaNode node, float mouseCodeY) {
         float halfHeight = node.LastRenderedHeight / 2f;
         if (mouseCodeY >= node.LastRenderedY - halfHeight && mouseCodeY <= node.LastRenderedY + halfHeight) {
             return node;
@@ -1099,7 +1099,7 @@ public class SkiaMapperControl : SKControl {
                 float scrollbarWidth = 5f;
                 float trackLeft = paletteBounds.Right - scrollbarWidth - 6f;
                 float trackTop = paletteBounds.Top + PaletteHeaderHeight + 6f;
-                SKRect scrollHitRect = new SKRect(trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
+                SKRect scrollHitRect = new (trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
                 if (scrollHitRect.Contains(e.X, e.Y)) {
                     isDraggingToolboxScrollbar = true;
                     toolboxScrollbarDragStartY = e.Y;
@@ -1139,7 +1139,7 @@ public class SkiaMapperControl : SKControl {
         for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
             var instance = ActiveFunctoids[i];
             float absoluteX = centerLeft + instance.X;
-            SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
+            SKRect itemRect = new (absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
 
             if (itemRect.Contains(e.X, e.Y)) {
                 if (e.X > itemRect.MidX) { // Right Side: Map connection wire drag initialization
@@ -1208,7 +1208,7 @@ public class SkiaMapperControl : SKControl {
         for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
             var instance = ActiveFunctoids[i];
             float absoluteX = centerLeft + instance.X;
-            SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
+            SKRect itemRect = new (absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
 
             if (itemRect.Contains(e.X, e.Y)) {
                 contextTargetInstance = instance;
@@ -1678,7 +1678,7 @@ public class SkiaMapperControl : SKControl {
             else if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
                 foreach (var instance in ActiveFunctoids) {
                     float absoluteX = centerLeft + instance.X;
-                    SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
+                    SKRect itemRect = new (absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
 
                     // Releasing mouse over the input processing boundary (left half zone)
                     if (itemRect.Contains(e.X, e.Y) && e.X <= itemRect.MidX) {
