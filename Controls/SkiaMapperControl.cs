@@ -10,6 +10,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using SkiaMapper.Forms;
 namespace SkiaMapper.Controls;
 
 public class SkiaMapperControl : SKControl {
@@ -327,7 +328,8 @@ public class SkiaMapperControl : SKControl {
     }
     private void EditScriptItem_Click(object? sender, EventArgs e) {
         if (contextTargetInstance != null) {
-            using var editor = new Forms.ScriptEditorDialog(contextTargetInstance);
+            //using var editor = new Forms.ScriptEditorDialog(contextTargetInstance);
+            using var editor = new ScriptEditorDialog(contextTargetInstance, this);
             if (editor.ShowDialog() == DialogResult.OK) {
                 // Script property allocations saved cleanly inside modal context
                 isCanvasDirty = true;
@@ -340,32 +342,17 @@ public class SkiaMapperControl : SKControl {
     private int GetFunctoidInputCount(FunctoidInstance instance) {
         if (instance == null) return 1;
 
-        // 1. Check if we already have lines wired up to a higher index
+        // Use the newly compiled script parameters value count
+        int baseCount = instance.Definition?.InputParametersCount ?? 1;
+
+        // If the dictionary tracking states are empty or cleared, count defaults to baseCount
         int maxConnectedIndex = -1;
         if (instance.ConnectedParameters != null && instance.ConnectedParameters.Count > 0) {
             maxConnectedIndex = instance.ConnectedParameters.Keys.Max();
         }
 
-        // 2. Fetch the current definition parameter count profile
-        int definitionCount = instance.Definition?.InputParametersCount ?? 1;
-
-        // 3. AUTO-RECOVERY CONSTRAINT: If it says 1, but there is an active script body, 
-        // re-run a fast check via the analyzer to see if it actually requires multiple parameters.
-        if (definitionCount <= 1) {
-            string? codeBody = instance.CustomScriptBody ?? instance.Definition?.ScriptTemplate;
-            if (!string.IsNullOrWhiteSpace(codeBody)) {
-                var constraints = FunctoidAnalyzer.AnalyzeTemplate(codeBody);
-
-                // Repair the definition inline so it remains fast on subsequent frame draws
-                if (instance.Definition != null) {
-                    instance.Definition.InputParametersCount = constraints.InitialSlots;
-                }
-                definitionCount = constraints.InitialSlots;
-            }
-        }
-
-        // 4. Return the maximum calculated slot height requirements
-        return Math.Max(definitionCount, maxConnectedIndex + 1);
+        int resolvedCount = Math.Max(baseCount, maxConnectedIndex + 1);
+        return resolvedCount > 0 ? resolvedCount : 1;
     }
     private float GetFunctoidInputSlotY(FunctoidInstance instance, int slotIndex) {
         int totalSlots = GetFunctoidInputCount(instance);
@@ -415,7 +402,7 @@ public class SkiaMapperControl : SKControl {
         canvas.DrawRect(centerRight - 3, 0, SplitterWidth, mainContentHeight, bgPaint);
         canvas.DrawRect(0, mainContentHeight - 2, w, SplitterWidth, bgPaint);
 
-        // 6. Draw Permanent Map Wire Connections (FIXED: Update inside RenderMapConnections to use the dynamic helpers)
+        // 6. Draw Permanent Map Wire Connections
         RenderMapConnections(canvas);
 
         // 7. Draw Live Dragging Connection Line Link
@@ -423,21 +410,44 @@ public class SkiaMapperControl : SKControl {
             using var dragPaint = new SKPaint { Color = SKColors.Orange, StrokeWidth = 2f, IsAntialias = true, Style = SKPaintStyle.Stroke };
             using var previewPath = new SKPath();
 
-            // FIXED: Dynamically resolve the starting wire anchor port point rather than using a flat click snapshot
+            // Calculate dynamic starting wire anchor port point rather than using a flat click snapshot
             SKPoint portStartPoint = GetSourceEndpointLocation(dragSource);
             if (portStartPoint.IsEmpty) {
-                // FIXED: Convert PointF parameters explicitly to a new SKPoint instance
                 portStartPoint = new SKPoint((float)currentDragPoint.X, (float)currentDragPoint.Y);
             }
             previewPath.MoveTo(portStartPoint.X, portStartPoint.Y);
 
-            float controlOffset = Math.Max(30f, Math.Abs(lastMousePos.X - portStartPoint.X) * 0.5f);
+            // LIVE HOVER SNAPPING: If dragging a line near an existing functoid block,
+            // evaluate constraints to preview snap directly onto the targeting input dot index
+            SKPoint targetPoint = new SKPoint(lastMousePos.X, lastMousePos.Y);
+
+            if (dragSource.Type != ConnectionEndpointType.DestinationNode) {
+                foreach (var instance in ActiveFunctoids) {
+                    float absFunctoidX = centerLeft + instance.X;
+                    SKRect hitBox = new SKRect(absFunctoidX, instance.Y, absFunctoidX + instance.Width, instance.Y + instance.Height);
+
+                    if (hitBox.Contains(lastMousePos.X, lastMousePos.Y) && lastMousePos.X <= hitBox.MidX) {
+                        int maxParams = GetFunctoidInputCount(instance);
+                        float relativeY = lastMousePos.Y - instance.Y;
+                        float sectorHeight = instance.Height / (maxParams > 0 ? maxParams : 1);
+                        int hoveredSlotIndex = (int)(relativeY / sectorHeight);
+
+                        if (hoveredSlotIndex < 0) hoveredSlotIndex = 0;
+                        if (hoveredSlotIndex >= maxParams) hoveredSlotIndex = maxParams - 1;
+
+                        targetPoint = new SKPoint(absFunctoidX, GetFunctoidInputSlotY(instance, hoveredSlotIndex));
+                        break;
+                    }
+                }
+            }
+
+            float controlOffset = Math.Max(30f, Math.Abs(targetPoint.X - portStartPoint.X) * 0.5f);
             float cp1X = portStartPoint.X + controlOffset;
             float cp1Y = portStartPoint.Y;
-            float cp2X = lastMousePos.X - controlOffset;
-            float cp2Y = lastMousePos.Y;
+            float cp2X = targetPoint.X - controlOffset;
+            float cp2Y = targetPoint.Y;
 
-            previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, lastMousePos.X, lastMousePos.Y);
+            previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, targetPoint.X, targetPoint.Y);
             canvas.DrawPath(previewPath, dragPaint);
         }
 
@@ -666,6 +676,9 @@ public class SkiaMapperControl : SKControl {
     }
 
     #region RenderFunctoidToolPallete 652
+
+
+
     private void RenderFunctoidToolPalette(SKCanvas canvas) {
         using var bodyPaint = new SKPaint { Color = new SKColor(240, 243, 248), Style = SKPaintStyle.Fill, IsAntialias = true };
         using var headerPaint = new SKPaint { Color = new SKColor(52, 73, 94), Style = SKPaintStyle.Fill, IsAntialias = true };
@@ -1429,6 +1442,60 @@ public class SkiaMapperControl : SKControl {
         return $"Transform_{functoidName.Replace(" ", "")}_{functoidId}";
     }
 
+
+    public void OnFunctoidScriptModified(FunctoidInstance instance) {
+        if (instance == null) return;
+
+        // 1. Force Roslyn to re-parse the altered method signature code block
+        string? updatedCode = instance.CustomScriptBody;
+        int parsedSlotsCount = 1; // Default fallback safety metric
+
+        if (!string.IsNullOrWhiteSpace(updatedCode)) {
+            var constraints = FunctoidAnalyzer.AnalyzeTemplate(updatedCode);
+            parsedSlotsCount = constraints.InitialSlots;
+
+            // Update the instance-level parameter profile tracker override
+            if (instance.Definition != null) {
+                instance.Definition.InputParametersCount = parsedSlotsCount;
+            }
+        }
+
+        // 2. CRITICAL FIX: Explicitly target and clear tracking parameters out of the dictionary first.
+        // If we don't clear this dictionary first, GetFunctoidInputCount() continues to look at 
+        // old connection keys and will report the higher historical number!
+        if (instance.ConnectedParameters != null) {
+            var orphanedKeys = instance.ConnectedParameters.Keys
+                .Where(index => index >= parsedSlotsCount)
+                .ToList();
+
+            foreach (var badIndex in orphanedKeys) {
+                instance.ConnectedParameters.Remove(badIndex);
+            }
+        }
+
+        // 3. Recompute the definitive maximum allowable input slot metrics
+        int newMaxSlots = GetFunctoidInputCount(instance);
+
+        // 4. REVISED: Prune old layout tracing lines globally across your map connections list
+        if (Connections != null) {
+            // Isolate obsolete connection links into a safe standalone snapshot list
+            var obsoleteConnections = Connections.Where(connection =>
+                connection.Target != null &&
+                connection.Target.Type == ConnectionEndpointType.Functoid &&
+                connection.Target.FunctoidInstanceId == instance.Id &&
+                connection.Target.InputIndex >= parsedSlotsCount // Track against the raw parsed count
+            ).ToList();
+
+            // Safely wipe out each dead wire from the UI collection
+            foreach (var connection in obsoleteConnections) {
+                Connections.Remove(connection);
+            }
+        }
+
+        // 5. Force SkiaSharp window frame redraw to update the UI instantly
+        Invalidate();
+    }
+
     private SKPoint GetSourceEndpointLocation(ConnectionEndpoint source) {
         if (source == null) return SKPoint.Empty;
 
@@ -1470,7 +1537,20 @@ public class SkiaMapperControl : SKControl {
             var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == target.FunctoidInstanceId.Value);
             if (instance != null) {
                 float absoluteX = leftTreeWidth + instance.X;
-                float absoluteY = GetFunctoidInputSlotY(instance, target.InputIndex);
+
+                // 1. Fetch the fresh, post-modification parameter slot count
+                int availableSlots = GetFunctoidInputCount(instance);
+
+                // 2. DEFENSIVE CLAMP: Protect against out-of-bounds indexes caused by script modifications
+                int safeInputIndex = target.InputIndex;
+                if (safeInputIndex >= availableSlots) {
+                    // Automatically snap the line down to the lowest remaining valid input slot
+                    safeInputIndex = availableSlots - 1;
+                    if (safeInputIndex < 0) safeInputIndex = 0;
+                }
+
+                // 3. Compute coordinates cleanly using the validated index
+                float absoluteY = GetFunctoidInputSlotY(instance, safeInputIndex);
                 return new SKPoint(absoluteX, absoluteY);
             }
         }
@@ -1478,7 +1558,44 @@ public class SkiaMapperControl : SKControl {
         return SKPoint.Empty;
     }
 
+    public void PruneOrphanedConnections(FunctoidInstance instance) {
+        if (instance == null || instance.Definition == null) return;
+
+        // Determine the actual new port count profile
+        int newMaxSlots = instance.Definition.InputParametersCount;
+
+        // 1. Look for global map wires that are now aiming at dead indexes and remove them safely
+        if (Connections != null) {
+            // Isolate dead connections into a snapshot list first to satisfy ObservableCollection tracking
+            var obsoleteConnections = Connections.Where(c =>
+                c.Target != null &&
+                c.Target.Type == ConnectionEndpointType.Functoid &&
+                c.Target.FunctoidInstanceId == instance.Id &&
+                c.Target.InputIndex >= newMaxSlots
+            ).ToList();
+
+            foreach (var connection in obsoleteConnections) {
+                Connections.Remove(connection);
+            }
+        }
+
+        // 2. Wipe matching values from the runtime internal parameter dictionary
+        if (instance.ConnectedParameters != null) {
+            var obsoleteKeys = instance.ConnectedParameters.Keys
+                .Where(k => k >= newMaxSlots)
+                .ToList();
+
+            foreach (var key in obsoleteKeys) {
+                instance.ConnectedParameters.Remove(key);
+            }
+        }
+    }
+
+
     #region OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
+
+
+
     protected override void OnMouseUp(MouseEventArgs e) {
         float centerLeft = leftTreeWidth;
         float centerRight = Width - rightTreeWidth;

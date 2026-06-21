@@ -1,7 +1,8 @@
-﻿using System;
+﻿using SkiaMapper.Controls;
+using SkiaMapper.Models;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
-using SkiaMapper.Models;
 
 namespace SkiaMapper.Forms {
     public class ScriptEditorDialog : Form {
@@ -10,9 +11,12 @@ namespace SkiaMapper.Forms {
         private Button btnSave;
         private Button btnCancel;
         private FunctoidInstance _instance;
+        private SkiaMapperControl _mapperControl; // Added field to hold the live control reference
 
-        public ScriptEditorDialog(FunctoidInstance instance) {
+        // REVISED CONSTRUCTOR: Accepts the active mapper control parent instance
+        public ScriptEditorDialog(FunctoidInstance instance, SkiaMapperControl mapperControl) {
             _instance = instance;
+            _mapperControl = mapperControl; // Store reference
             InitializeComponent();
 
             // Automatically binds the pre-built template script or custom modifications cleanly
@@ -54,6 +58,12 @@ namespace SkiaMapper.Forms {
             btnSave.Click += (s, e) => {
                 _instance.CustomScriptBody = txtScript.Text;
                 _instance.CustomMethodName = txtMethodName.Text;
+
+                // FIXED: Execute the modification parser against the parent instance context
+                if (_mapperControl != null) {
+                    _mapperControl.OnFunctoidScriptModified(_instance);
+                }
+
                 this.Close();
             };
 
