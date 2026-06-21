@@ -20,13 +20,13 @@ public class SkiaMapperControl : SKControl {
     private float logPanelHeight = 120f;
     private const float SplitterWidth = 5f;
     // Tool Palette Window Metrics
-    private SKRect paletteBounds = new SKRect(310f, 30f, 550f, 450f);
+    private SKRect paletteBounds = new (310f, 30f, 550f, 450f);
     private const float PaletteHeaderHeight = 64f;
     private bool isDraggingPalette = false;
     private PointF paletteDragOffset;
     private bool isPaletteExpanded = true;
     // Remembers its size when open
-    private float expandedPaletteHeight = 420f;
+    private readonly float expandedPaletteHeight = 420f;
     // Drag-and-Drop / Interactive Link State Tracking
     private FunctoidDefinition? draggingPaletteFunctoid = null;
     private PointF paletteItemDragOffset;
@@ -48,8 +48,8 @@ public class SkiaMapperControl : SKControl {
     private ContextMenuStrip functoidContextMenu;
     private ContextMenuStrip connectionContextMenu;
     private FunctoidInstance? contextTargetInstance = null;
-    private FunctoidInstance? selectedCanvasInstance = null; // <-- ADD THIS LINE
-    private MappingConnection? selectedConnection = null; // <-- ADD THIS LINE
+    private FunctoidInstance? selectedCanvasInstance = null; 
+    private MappingConnection? selectedConnection = null;
     private MappingConnection? contextTargetConnection = null;
     private float toolboxVirtualScrollY = 0f;
     private float maxToolboxContentHeight = 0f;
@@ -63,18 +63,18 @@ public class SkiaMapperControl : SKControl {
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public SchemaNode? DestinationRoot { get; set; }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public List<FunctoidCategory> FunctoidCategories { get; set; } = new();
+    public List<FunctoidCategory> FunctoidCategories { get; set; } =[];
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public List<FunctoidDefinition> AvailableFunctoids { get; set; } = new();
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public ObservableCollection<FunctoidInstance> ActiveFunctoids { get; } = new();
+    public ObservableCollection<FunctoidInstance> ActiveFunctoids { get; } = [];
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public ObservableCollection<MappingConnection> Connections { get; } = new();
+    public ObservableCollection<MappingConnection> Connections { get; } = [];
     private ConnectionEndpoint? dragSource = null;
     private PointF currentDragPoint;
     // Maps a node path string to its exact, freshly rendered screen Y-coordinate
-    private readonly Dictionary<string, float> _sourceNodeYCache = new();
-    private readonly Dictionary<string, float> _destinationNodeYCache = new();
+    private readonly Dictionary<string, float> _sourceNodeYCache = [];  
+    private readonly Dictionary<string, float> _destinationNodeYCache = [];
 
 
     public SkiaMapperControl() {
@@ -744,7 +744,7 @@ public class SkiaMapperControl : SKControl {
         // 1. Collapse/Expand Toggle Slot
         float toggleX = currentButtonRightEdge - 8f;
         string toggleGlyph = isPaletteExpanded ? "▲" : "▼";
-        canvas.DrawText(toggleGlyph, toggleX, paletteBounds.Top + 22f, toggleTextPaint);
+        canvas.DrawText(toggleGlyph, toggleX, paletteBounds.Top + 22f,SKTextAlign.Center, font,  toggleTextPaint);
 
         currentButtonRightEdge -= 28f;
 
@@ -797,7 +797,8 @@ public class SkiaMapperControl : SKControl {
             }
 
             // Render complementary label context beside the gear icon
-            canvas.DrawText("Execute Map Transformation Pipeline", executeXsltBtnRect.Right + 8f, row2CenterY + 4f, actionTextPaint);
+           // canvas.DrawText("Execute Map Transformation Pipeline", executeXsltBtnRect.Right + 8f, row2CenterY + 4f, actionTextPaint);
+            canvas.DrawText("Execute Map Transformation", executeXsltBtnRect.Right + 8f, row2CenterY + 4f,font, actionTextPaint);
         }
 
         // =================================================================================
@@ -834,7 +835,8 @@ public class SkiaMapperControl : SKControl {
                 if (catHeaderRect.Bottom > contentClipArea.Top && catHeaderRect.Top < contentClipArea.Bottom) {
                     canvas.DrawRoundRect(catHeaderRect, 3f, 3f, categoryBgPaint);
                     string arrowToken = category.IsExpanded ? "▼ " : "► ";
-                    canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f, categoryTextPaint);
+                    //   canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f, categoryTextPaint);
+                    canvas.DrawText($"{arrowToken}{category.Name.ToUpper()}", catHeaderRect.Left + 8f, catHeaderRect.Top + 15f,font, categoryTextPaint);
                 }
 
                 virtualTrackingY += categoryHeaderHeight + 4f;
@@ -853,7 +855,7 @@ public class SkiaMapperControl : SKControl {
                             using var dotPaint = new SKPaint { Color = GetCategoryColor(category.Color), Style = SKPaintStyle.Fill, IsAntialias = true };
                             canvas.DrawCircle(rowRect.Left + 12f, rowRect.MidY, 4f, dotPaint);
 
-                            canvas.DrawText(functoid.Name, rowRect.Left + 24f, rowRect.Top + 16f, itemTextPaint);
+                            canvas.DrawText(functoid.Name, rowRect.Left + 24f, rowRect.Top + 16f,font, itemTextPaint);
                         }
 
                         virtualTrackingY += itemHeight + 4f;
