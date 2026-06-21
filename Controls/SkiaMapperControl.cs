@@ -340,10 +340,10 @@ public class SkiaMapperControl : SKControl {
     }
 
     private int GetFunctoidInputCount(FunctoidInstance instance) {
-        if (instance == null) return 1;
+        if (instance == null) return 0;
 
         // Use the newly compiled script parameters value count
-        int baseCount = instance.Definition?.InputParametersCount ?? 1;
+        int baseCount = instance.Definition?.InputParametersCount ?? 0;
 
         // If the dictionary tracking states are empty or cleared, count defaults to baseCount
         int maxConnectedIndex = -1;
@@ -352,7 +352,7 @@ public class SkiaMapperControl : SKControl {
         }
 
         int resolvedCount = Math.Max(baseCount, maxConnectedIndex + 1);
-        return resolvedCount > 0 ? resolvedCount : 1;
+        return resolvedCount > 0 ? resolvedCount : 0;
     }
     private float GetFunctoidInputSlotY(FunctoidInstance instance, int slotIndex) {
         int totalSlots = GetFunctoidInputCount(instance);
