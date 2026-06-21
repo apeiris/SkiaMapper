@@ -53,7 +53,9 @@ public class SkiaMapperControl : SKControl {
     private MappingConnection? contextTargetConnection = null;
     private float toolboxVirtualScrollY = 0f;
     private float maxToolboxContentHeight = 0f;
+#pragma warning disable CS0414
     private bool isDraggingToolboxScrollbar = false;
+#pragma warning restore CS0414
     private float toolboxScrollbarDragStartY = 0f;
     private float toolboxScrollbarDragStartScrollY = 0f;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -453,9 +455,10 @@ public class SkiaMapperControl : SKControl {
 
         // 8. Draw Ghost Palette Item Preview Box
         if (draggingPaletteFunctoid != null) {
+            using var gFont = new SKFont(SKTypeface.Default);
             using var ghostBoxPaint = new SKPaint { Color = new SKColor(52, 152, 219, 160), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var ghostBorderPaint = new SKPaint { Color = new SKColor(41, 128, 185), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
-            using var ghostTextPaint = new SKPaint { Color = SKColors.White, TextSize = 11f, IsAntialias = true, TextAlign = SKTextAlign.Center };
+            using var ghostTextPaint = new SKPaint { Color = SKColors.White,  IsAntialias = true };
 
             float ghostX = lastMousePos.X - paletteItemDragOffset.X;
             float ghostY = lastMousePos.Y - paletteItemDragOffset.Y;
@@ -463,11 +466,14 @@ public class SkiaMapperControl : SKControl {
 
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBoxPaint);
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBorderPaint);
-            canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, ghostTextPaint);
+//           canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, ghostTextPaint);
+            canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f,SKTextAlign.Center,gFont, ghostTextPaint);
+
         }
     }
     private void RenderTreeElement(SKCanvas canvas, SchemaNode node, float x, ref float currentY, bool isSourceTree) {
-        using var textPaint = new SKPaint { Color = SKColors.Black, TextSize = 12f, IsAntialias = true };
+        using var font = new SKFont(SKTypeface.Default);
+        using var textPaint = new SKPaint { Color = SKColors.Black,  IsAntialias = true };
         using var nodeBoxPaint = new SKPaint { Color = new SKColor(220, 230, 242), Style = SKPaintStyle.Fill };
         using var nodeBorderPaint = new SKPaint { Color = new SKColor(120, 150, 180), Style = SKPaintStyle.Stroke, StrokeWidth = 1f };
 
@@ -494,7 +500,8 @@ public class SkiaMapperControl : SKControl {
         canvas.DrawRoundRect(rowRect, 2f, 2f, nodeBorderPaint);
 
         string expandGlyph = node.Children.Count > 0 ? (node.IsExpanded ? "▼ " : "► ") : "  ";
-        canvas.DrawText($"{expandGlyph}{node.Name}", x + 6f, currentY + 16f, textPaint);
+        //  canvas.DrawText($"{expandGlyph}{node.Name}", x + 6f, currentY + 16f, textPaint);
+        canvas.DrawText($"{expandGlyph}{node.Name}", x + 6f, currentY + 16f, font, textPaint);
 
         currentY += nodeHeight + 4f;
 
@@ -605,10 +612,11 @@ public class SkiaMapperControl : SKControl {
     }
 
     private void RenderActiveGridFunctoids(SKCanvas canvas, float centerLeft) {
+        using var gFont = new SKFont(SKTypeface.Default);
         using var boxPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
         using var accentPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
         using var borderPaint = new SKPaint { Color = new SKColor(210, 215, 220), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
-        using var textPaint = new SKPaint { Color = new SKColor(50, 50, 50), TextSize = 11f, IsAntialias = true, TextAlign = SKTextAlign.Center, FakeBoldText = true };
+        using var textPaint = new SKPaint { Color = new SKColor(50, 50, 50),  IsAntialias = true  };
         using var portPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
         using var portBorder = new SKPaint { Color = new SKColor(120, 130, 140), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
 
@@ -646,7 +654,8 @@ public class SkiaMapperControl : SKControl {
             canvas.DrawRoundRect(rect, 4f, 4f, borderPaint);
 
             // 6. Draw the Functoid identifier description label text
-            canvas.DrawText(instance.Definition?.Name ?? "Functoid", rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f, textPaint);
+            // canvas.DrawText(instance.Definition?.Name ?? "Functoid", rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f, textPaint);
+            canvas.DrawText(instance.Definition?.Name ?? "Functoid",  rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f,SKTextAlign.Center,gFont, textPaint);
 
             // --- NEW: SCRIPT MODIFICATION TRACKER ---
             // 7. If the script template differs from baseline, draw a badge in the top-right corner
@@ -680,13 +689,14 @@ public class SkiaMapperControl : SKControl {
 
 
     private void RenderFunctoidToolPalette(SKCanvas canvas) {
+        using var font = new SKFont(SKTypeface.Default, 11f);
         using var bodyPaint = new SKPaint { Color = new SKColor(240, 243, 248), Style = SKPaintStyle.Fill, IsAntialias = true };
         using var headerPaint = new SKPaint { Color = new SKColor(52, 73, 94), Style = SKPaintStyle.Fill, IsAntialias = true };
         using var actionBarPaint = new SKPaint { Color = new SKColor(44, 62, 80), Style = SKPaintStyle.Fill, IsAntialias = true }; // Slightly darker accent for Row 2
         using var borderPaint = new SKPaint { Color = new SKColor(44, 62, 80), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
-        using var titleTextPaint = new SKPaint { Color = SKColors.White, TextSize = 13f, IsAntialias = true, FakeBoldText = true };
-        using var actionTextPaint = new SKPaint { Color = new SKColor(200, 214, 229), TextSize = 11f, IsAntialias = true, FakeBoldText = false };
-        using var toggleTextPaint = new SKPaint { Color = SKColors.White, TextSize = 14f, IsAntialias = true, TextAlign = SKTextAlign.Center };
+        using var titleTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true };
+        using var actionTextPaint = new SKPaint { Color = new SKColor(200, 214, 229),  IsAntialias = true  };
+        using var toggleTextPaint = new SKPaint { Color = SKColors.White,  IsAntialias = true  };
 
         using var iconStrokePaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
         using var iconFillPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
@@ -696,10 +706,10 @@ public class SkiaMapperControl : SKControl {
         using var saveIconFillPaint = new SKPaint { Color = saveIconColor, Style = SKPaintStyle.Fill, IsAntialias = true };
 
         using var categoryBgPaint = new SKPaint { Color = new SKColor(215, 222, 233), Style = SKPaintStyle.Fill, IsAntialias = true };
-        using var categoryTextPaint = new SKPaint { Color = new SKColor(60, 70, 80), TextSize = 11f, IsAntialias = true, FakeBoldText = true };
+        using var categoryTextPaint = new SKPaint { Color = new SKColor(60, 70, 80), IsAntialias = true };
         using var itemBoxPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
         using var itemBorderPaint = new SKPaint { Color = new SKColor(195, 205, 215), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
-        using var itemTextPaint = new SKPaint { Color = new SKColor(40, 40, 40), TextSize = 11f, IsAntialias = true };
+        using var itemTextPaint = new SKPaint { Color = new SKColor(40, 40, 40),  IsAntialias = true };
 
         renderedItemHitboxes.Clear();
 
@@ -723,7 +733,7 @@ public class SkiaMapperControl : SKControl {
         canvas.DrawRect(row2Rect, actionBarPaint);
 
         // Render Window Title on Row 1
-        canvas.DrawText("Functoid Toolbox", paletteBounds.Left + 12f, paletteBounds.Top + 21f, titleTextPaint);
+        canvas.DrawText("Functoid Toolbox", paletteBounds.Left + 12f, paletteBounds.Top + 21f, font, titleTextPaint);
 
         // =================================================================================
         // ROW 1 BUTTON LAYOUT ENGINE (Right-to-Left Window Level Actions)
