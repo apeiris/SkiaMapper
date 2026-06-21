@@ -71,7 +71,7 @@
 	</Functoid>
 
 	<Functoid name="Multiply" catId="2" Id="210">
-		<MethodNameFormat>({0})</MethodNameFormat>
+		<MethodNameFormat>({0},{1})</MethodNameFormat>
 		<JoinOperator> * </JoinOperator>
 		<ScriptTemplate>
 			<![CDATA[

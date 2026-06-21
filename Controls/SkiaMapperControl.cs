@@ -69,6 +69,11 @@ public class SkiaMapperControl : SKControl {
     public ObservableCollection<MappingConnection> Connections { get; } = new();
     private ConnectionEndpoint? dragSource = null;
     private PointF currentDragPoint;
+    // Maps a node path string to its exact, freshly rendered screen Y-coordinate
+    private readonly Dictionary<string, float> _sourceNodeYCache = new();
+    private readonly Dictionary<string, float> _destinationNodeYCache = new();
+
+
     public SkiaMapperControl() {
         this.DoubleBuffered = true;
         this.Dock = DockStyle.Fill;
@@ -331,17 +336,58 @@ public class SkiaMapperControl : SKControl {
         }
 
     }
+
+    private int GetFunctoidInputCount(FunctoidInstance instance) {
+        if (instance == null) return 1;
+
+        // 1. Check if we already have lines wired up to a higher index
+        int maxConnectedIndex = -1;
+        if (instance.ConnectedParameters != null && instance.ConnectedParameters.Count > 0) {
+            maxConnectedIndex = instance.ConnectedParameters.Keys.Max();
+        }
+
+        // 2. Fetch the current definition parameter count profile
+        int definitionCount = instance.Definition?.InputParametersCount ?? 1;
+
+        // 3. AUTO-RECOVERY CONSTRAINT: If it says 1, but there is an active script body, 
+        // re-run a fast check via the analyzer to see if it actually requires multiple parameters.
+        if (definitionCount <= 1) {
+            string? codeBody = instance.CustomScriptBody ?? instance.Definition?.ScriptTemplate;
+            if (!string.IsNullOrWhiteSpace(codeBody)) {
+                var constraints = FunctoidAnalyzer.AnalyzeTemplate(codeBody);
+
+                // Repair the definition inline so it remains fast on subsequent frame draws
+                if (instance.Definition != null) {
+                    instance.Definition.InputParametersCount = constraints.InitialSlots;
+                }
+                definitionCount = constraints.InitialSlots;
+            }
+        }
+
+        // 4. Return the maximum calculated slot height requirements
+        return Math.Max(definitionCount, maxConnectedIndex + 1);
+    }
+    private float GetFunctoidInputSlotY(FunctoidInstance instance, int slotIndex) {
+        int totalSlots = GetFunctoidInputCount(instance);
+        float slotHeight = instance.Height / totalSlots;
+        return instance.Y + (slotIndex * slotHeight) + (slotHeight / 2f);
+    }
+
     #region Paint and Render methods
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
         base.OnPaintSurface(e);
+        _sourceNodeYCache.Clear();
+        _destinationNodeYCache.Clear();
         var canvas = e.Surface.Canvas;
         int w = e.Info.Width;
         int h = e.Info.Height;
         canvas.Clear(SKColors.White);
-        float centerLeft = leftTreeWidth;  // Declared ONCE cleanly for the entire method scope
+
+        float centerLeft = leftTreeWidth;
         float centerRight = w - rightTreeWidth;
         float mainContentHeight = h - logPanelHeight;
-        using var bgPaint = new SKPaint(); 
+        using var bgPaint = new SKPaint();
+
         // 1. Draw Viewport Background Panels
         bgPaint.Color = SKColors.GhostWhite;
         canvas.DrawRect(0, 0, leftTreeWidth, mainContentHeight, bgPaint);
@@ -350,44 +396,61 @@ public class SkiaMapperControl : SKControl {
         canvas.DrawRect(centerLeft, 0, centerRight - centerLeft, mainContentHeight, bgPaint);
         bgPaint.Color = new SKColor(30, 30, 30);
         canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
-        float currentY = 10f;   
+
+        float currentY = 10f;
         // 2. Draw Trees
         if (SourceRoot != null) RenderTreeElement(canvas, SourceRoot, 15f, ref currentY, true);
         currentY = 10f;
         if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentY, false);
-        RenderActiveGridFunctoids(canvas, centerLeft); 
+
         // 3. Draw Placed Canvas Grid Functoids
-        RenderFunctoidToolPalette(canvas);  
+        RenderActiveGridFunctoids(canvas, centerLeft);
+
         // 4. Draw Floating Tool Palette Window
-        bgPaint.Color = SKColors.DarkGray; 
+        RenderFunctoidToolPalette(canvas);
+
         // 5. Draw Layout Grid Splitters
+        bgPaint.Color = SKColors.DarkGray;
         canvas.DrawRect(leftTreeWidth - 2, 0, SplitterWidth, mainContentHeight, bgPaint);
         canvas.DrawRect(centerRight - 3, 0, SplitterWidth, mainContentHeight, bgPaint);
         canvas.DrawRect(0, mainContentHeight - 2, w, SplitterWidth, bgPaint);
+
+        // 6. Draw Permanent Map Wire Connections (FIXED: Update inside RenderMapConnections to use the dynamic helpers)
         RenderMapConnections(canvas);
-        // 6. Draw Permanent Map Wire Connections
-        if (dragSource != null) { 
-            // 7. Draw Live Dragging Connection Line Link
+
+        // 7. Draw Live Dragging Connection Line Link
+        if (dragSource != null) {
             using var dragPaint = new SKPaint { Color = SKColors.Orange, StrokeWidth = 2f, IsAntialias = true, Style = SKPaintStyle.Stroke };
             using var previewPath = new SKPath();
-            previewPath.MoveTo(currentDragPoint.X, currentDragPoint.Y);
-            // FIXED: Using lastMousePos (cached from MouseMove) instead of e.X/e.Y
-            float controlOffset = Math.Max(30f, Math.Abs(lastMousePos.X - currentDragPoint.X) * 0.5f);
-            float cp1X = currentDragPoint.X + controlOffset;
-            float cp1Y = currentDragPoint.Y;
+
+            // FIXED: Dynamically resolve the starting wire anchor port point rather than using a flat click snapshot
+            SKPoint portStartPoint = GetSourceEndpointLocation(dragSource);
+            if (portStartPoint.IsEmpty) {
+                // FIXED: Convert PointF parameters explicitly to a new SKPoint instance
+                portStartPoint = new SKPoint((float)currentDragPoint.X, (float)currentDragPoint.Y);
+            }
+            previewPath.MoveTo(portStartPoint.X, portStartPoint.Y);
+
+            float controlOffset = Math.Max(30f, Math.Abs(lastMousePos.X - portStartPoint.X) * 0.5f);
+            float cp1X = portStartPoint.X + controlOffset;
+            float cp1Y = portStartPoint.Y;
             float cp2X = lastMousePos.X - controlOffset;
             float cp2Y = lastMousePos.Y;
+
             previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, lastMousePos.X, lastMousePos.Y);
             canvas.DrawPath(previewPath, dragPaint);
         }
-        if (draggingPaletteFunctoid != null) {  
-            // 8. Draw Ghost Palette Item Preview Box
+
+        // 8. Draw Ghost Palette Item Preview Box
+        if (draggingPaletteFunctoid != null) {
             using var ghostBoxPaint = new SKPaint { Color = new SKColor(52, 152, 219, 160), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var ghostBorderPaint = new SKPaint { Color = new SKColor(41, 128, 185), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
             using var ghostTextPaint = new SKPaint { Color = SKColors.White, TextSize = 11f, IsAntialias = true, TextAlign = SKTextAlign.Center };
-            float ghostX = lastMousePos.X - paletteItemDragOffset.X; // FIXED: Using lastMousePos instead of e.X/e.Y
+
+            float ghostX = lastMousePos.X - paletteItemDragOffset.X;
             float ghostY = lastMousePos.Y - paletteItemDragOffset.Y;
             SKRect ghostRect = new SKRect(ghostX, ghostY, ghostX + 110f, ghostY + 36f);
+
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBoxPaint);
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBorderPaint);
             canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, ghostTextPaint);
@@ -401,8 +464,20 @@ public class SkiaMapperControl : SKControl {
         float nodeHeight = 22f;
         float indentSpacing = 15f;
 
-        node.LastRenderedY = currentY + (nodeHeight / 2f);
+        // Calculate the precise visual center Y coordinate of this specific row item
+        float visualCenterY = currentY + (nodeHeight / 2f);
+
+        node.LastRenderedY = visualCenterY;
         node.LastRenderedHeight = nodeHeight;
+
+        // CACHE REGISTRATION: Save the exact screen coordinates for the wire anchors
+        if (isSourceTree) {
+            // Left Panel Source Node: The anchor pin sits right on the edge of the panel divider line
+            _sourceNodeYCache[node.Name] = visualCenterY;
+        } else {
+            // Right Panel Destination Node: The anchor pin sits right on the starting edge of the right divider line
+            _destinationNodeYCache[node.Name] = visualCenterY;
+        }
 
         SKRect rowRect = new SKRect(x, currentY, x + (isSourceTree ? leftTreeWidth : rightTreeWidth) - 30f, currentY + nodeHeight);
         canvas.DrawRoundRect(rowRect, 2f, 2f, nodeBoxPaint);
@@ -500,86 +575,97 @@ public class SkiaMapperControl : SKControl {
             }
         }
     }
-    private void RenderActiveGridFunctoids(SKCanvas canvas, float canvasLeftOffset) {
-        using var borderPaint = new SKPaint { Color = new SKColor(170, 185, 200), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
-        using var textPaint = new SKPaint { Color = new SKColor(45, 55, 65), TextSize = 11f, IsAntialias = true, FakeBoldText = true, TextAlign = SKTextAlign.Center };
-        using var pinPaint = new SKPaint { Color = new SKColor(130, 140, 150), Style = SKPaintStyle.Fill, IsAntialias = true };
+    private SKColor GetFunctoidCategoryColor(FunctoidInstance instance) {
+        if (instance?.Definition == null || FunctoidCategories == null) {
+            return new SKColor(220, 225, 230); // Default neutral fallback color
+        }
 
-        foreach (var functoid in ActiveFunctoids) {
-            if (functoid == null) continue;
+        // Match the functoid's CategoryId against your collection of loaded palette categories
+        var category = FunctoidCategories.FirstOrDefault(c => c.Id == instance.Definition.CategoryId);
+        if (category == null || string.IsNullOrWhiteSpace(category.Color)) {
+            return new SKColor(220, 225, 230);
+        }
+        System.Drawing.Color systemColor =System.Drawing.Color.FromName(category.Color);
 
-            float absoluteX = canvasLeftOffset + functoid.X;
-            SKRect rect = new SKRect(absoluteX, functoid.Y, absoluteX + functoid.Width, functoid.Y + functoid.Height);
+        if (systemColor.IsKnownColor) {
+            return new SKColor(systemColor.R, systemColor.G, systemColor.B, systemColor.A);
+        }
 
-            // 1. Resolve Dynamic Category Identity Color Tint
-            SKColor nodeFillColor = new SKColor(235, 240, 248); // High-contrast neutral safe fallback
-            SKColor accentColor = SKColors.LightGray;
-            bool hasAccent = false;
+        return new SKColor(220, 225, 230);
+    }
 
-            if (functoid.Definition != null) {
-                var category = FunctoidCategories.Find(c => c.Id == functoid.Definition.CategoryId);
-                if (category != null) {
-                    accentColor = GetCategoryColor(category.Color);
-                    // Apply a transparent alpha blend (40 out of 255) for the block body 
-                    // to maintain crisp text legibility against dark category definitions
-                    nodeFillColor = new SKColor(accentColor.Red, accentColor.Green, accentColor.Blue, 40);
-                    hasAccent = true;
-                }
+    private void RenderActiveGridFunctoids(SKCanvas canvas, float centerLeft) {
+        using var boxPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+        using var accentPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+        using var borderPaint = new SKPaint { Color = new SKColor(210, 215, 220), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+        using var textPaint = new SKPaint { Color = new SKColor(50, 50, 50), TextSize = 11f, IsAntialias = true, TextAlign = SKTextAlign.Center, FakeBoldText = true };
+        using var portPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
+        using var portBorder = new SKPaint { Color = new SKColor(120, 130, 140), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+
+        // Paint configuration for the script modification indicator
+        using var modifiedIndicatorPaint = new SKPaint { Color = new SKColor(231, 76, 60), Style = SKPaintStyle.Fill, IsAntialias = true }; // Crimson/Red
+        using var modifiedIndicatorBorder = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+
+        foreach (var instance in ActiveFunctoids) {
+            float absX = centerLeft + instance.X;
+            SKRect rect = new SKRect(absX, instance.Y, absX + instance.Width, instance.Y + instance.Height);
+
+            // 1. Fetch the raw background category color profile
+            SKColor catColor = GetFunctoidCategoryColor(instance);
+
+            // 2. Set the main body to a light pastel shade
+            boxPaint.Color = catColor.WithAlpha(35);
+            accentPaint.Color = catColor;
+
+            // 3. Draw the main block background container
+            canvas.DrawRoundRect(rect, 4f, 4f, boxPaint);
+
+            // 4. Draw the vertical category accent bar strictly aligned to the left inner boundary
+            float accentBarWidth = 5f;
+            SKRect accentBarRect = new SKRect(rect.Left, rect.Top, rect.Left + accentBarWidth, rect.Bottom);
+
+            canvas.Save();
+            using (var clipPath = new SKPath()) {
+                clipPath.AddRoundRect(rect, 4f, 4f);
+                canvas.ClipPath(clipPath);
             }
+            canvas.DrawRect(accentBarRect, accentPaint);
+            canvas.Restore();
 
-            // 2. Render Node Base Container 
-            using var dynamicBoxPaint = new SKPaint { Color = nodeFillColor, Style = SKPaintStyle.Fill, IsAntialias = true };
-            canvas.DrawRoundRect(rect, 4f, 4f, dynamicBoxPaint);
+            // 5. Outline the outer shell container rim
             canvas.DrawRoundRect(rect, 4f, 4f, borderPaint);
 
-            // --- SELECTION HIGHLIGHT PROFILE ---
-            // If this block matches the active click selection, draw an outer focus halo
-            if (functoid == selectedCanvasInstance) {
-                using var selectionRingPaint = new SKPaint {
-                    Color = SKColors.Orange, // Synced with mapping wire theme
-                    Style = SKPaintStyle.Stroke,
-                    StrokeWidth = 2.5f,
-                    IsAntialias = true
-                };
-                // Slightly expand outward so the ring frames the border without overlapping text
-                SKRect selectionRect = rect;
-                selectionRect.Inflate(1.5f, 1.5f);
-                canvas.DrawRoundRect(selectionRect, 5f, 5f, selectionRingPaint);
-            }
+            // 6. Draw the Functoid identifier description label text
+            canvas.DrawText(instance.Definition?.Name ?? "Functoid", rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f, textPaint);
 
-            // 3. Render Solid Category Accent Strip (Left Side Frame Flag)
-            if (hasAccent) {
-                using var accentPaint = new SKPaint { Color = accentColor, Style = SKPaintStyle.Fill, IsAntialias = true };
-                SKRect accentStrip = new SKRect(rect.Left, rect.Top, rect.Left + 5f, rect.Bottom);
-                canvas.DrawRoundRect(accentStrip, 4f, 4f, accentPaint);
-                // Squaring out the inside corners of our accent bar frame safely
-                canvas.DrawRect(new SKRect(rect.Left + 3f, rect.Top, rect.Left + 5f, rect.Bottom), accentPaint);
-            }
-
-            // 4. Draw Input/Output Handle Vector Nubs
-            canvas.DrawCircle(rect.Left, rect.MidY, 4f, pinPaint);
-            canvas.DrawCircle(rect.Right, rect.MidY, 4f, pinPaint);
-
-            // 5. Draw Descriptive Label
-            string displayName = functoid.Definition != null ? functoid.Definition.Name : "Unknown";
-            canvas.DrawText(displayName, rect.MidX + (hasAccent ? 2.5f : 0f), rect.MidY + 4f, textPaint);
-
-            // 6. INDICATOR ONLY: Draw a simple red dot in the top-right corner if custom
-            bool isScriptCustomized = functoid.Definition != null &&
-                                      !string.IsNullOrEmpty(functoid.CustomScriptBody) &&
-                                      functoid.CustomScriptBody.Trim() != functoid.Definition.ScriptTemplate?.Trim();
-
-            if (isScriptCustomized) {
-                float dotRadius = 3.5f;
+            // --- NEW: SCRIPT MODIFICATION TRACKER ---
+            // 7. If the script template differs from baseline, draw a badge in the top-right corner
+            if (instance.IsScriptCustomized) {
+                // Position the indicator dot slightly inset from the upper right corner boundary
                 float dotX = rect.Right - 6f;
                 float dotY = rect.Top + 6f;
+                float dotRadius = 3.5f;
 
-                using var redDotPaint = new SKPaint { Color = SKColors.Red, Style = SKPaintStyle.Fill, IsAntialias = true };
-                canvas.DrawCircle(dotX, dotY, dotRadius, redDotPaint);
+                canvas.DrawCircle(dotX, dotY, dotRadius, modifiedIndicatorPaint);
+                canvas.DrawCircle(dotX, dotY, dotRadius, modifiedIndicatorBorder);
             }
+
+            // 8. DRAW MULTIPLE INPUT PORTS DYNAMICALLY
+            int inputCount = GetFunctoidInputCount(instance);
+            for (int i = 0; i < inputCount; i++) {
+                float portY = GetFunctoidInputSlotY(instance, i);
+
+                canvas.DrawCircle(absX, portY, 3.5f, portPaint);
+                canvas.DrawCircle(absX, portY, 3.5f, portBorder);
+            }
+
+            // 9. Draw single execution output port circle on the right side boundary edge layout margin
+            canvas.DrawCircle(absX + instance.Width, instance.Y + (instance.Height / 2f), 3.5f, portPaint);
+            canvas.DrawCircle(absX + instance.Width, instance.Y + (instance.Height / 2f), 3.5f, portBorder);
         }
     }
-    #region RenderFunctoidToolPallete 534
+
+    #region RenderFunctoidToolPallete 652
     private void RenderFunctoidToolPalette(SKCanvas canvas) {
         using var bodyPaint = new SKPaint { Color = new SKColor(240, 243, 248), Style = SKPaintStyle.Fill, IsAntialias = true };
         using var headerPaint = new SKPaint { Color = new SKColor(52, 73, 94), Style = SKPaintStyle.Fill, IsAntialias = true };
@@ -779,62 +865,89 @@ public class SkiaMapperControl : SKControl {
         canvas.DrawRoundRect(paletteBounds, 6f, 6f, borderPaint);
     }
     #endregion 700
+
+    private float GetSourceNodeVisualY(string nodePath) {
+        if (string.IsNullOrEmpty(nodePath)) return 20f;
+
+        // 1. Reset our running tracker position to match the start layout position of RenderTreeElement
+        float runningY = 10f;
+
+        // 2. Perform a structural search loop down the tree layout to isolate the vertical height point
+        if (SourceRoot != null) {
+            if (FindNodeYRecursive(SourceRoot, nodePath, ref runningY)) {
+                return runningY; // Found the precise vertical coordinate offset
+            }
+        }
+        return 20f; // Safe baseline fallback position
+    }
+
+    private float GetDestinationNodeVisualY(string nodePath) {
+        if (string.IsNullOrEmpty(nodePath)) return 20f;
+
+        // 1. Reset our running tracker position to match the start layout position of RenderTreeElement
+        float runningY = 10f;
+
+        // 2. Perform a structural search loop down the tree layout to isolate the vertical height point
+        if (DestinationRoot != null) {
+            if (FindNodeYRecursive(DestinationRoot, nodePath, ref runningY)) {
+                return runningY;
+            }
+        }
+        return 20f; // Safe baseline fallback position
+    }
+
+    // Deep tree layout search coordinator
+    private bool FindNodeYRecursive(SchemaNode node, string targetPath, ref float currentY) {
+        // Check if we hit the targeted element row item name
+        if (node.Name == targetPath) {
+            // Calculate the center point of the 24px/20px high list item row box block
+            return true;
+        }
+
+        // If your tree implementation expands/collapses nodes, mirror that layout tracking state check here
+        if (node.IsExpanded && node.Children != null) {
+            foreach (var child in node.Children) {
+                currentY += 24f; // Increment by your layout grid's structural item row height step
+                if (FindNodeYRecursive(child, targetPath, ref currentY)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private void RenderMapConnections(SKCanvas canvas) {
-        using var linePaint = new SKPaint {
-            Color = new SKColor(46, 204, 113), // Crisp BizTalk Green
-            StrokeWidth = 2.0f,
+        if (Connections == null) return;
+
+        using var wirePaint = new SKPaint {
+            Color = new SKColor(46, 204, 113), // Map theme green trace line
+            StrokeWidth = 2f,
             Style = SKPaintStyle.Stroke,
             IsAntialias = true
         };
 
-        float centerLeft = leftTreeWidth;
-
         foreach (var conn in Connections) {
-            float startX = 0f, startY = 0f;
-            float endX = 0f, endY = 0f;
+            SKPoint startPt = GetSourceEndpointLocation(conn.Source);
+            SKPoint endPt = GetTargetEndpointLocation(conn.Target);
 
-            // 1. EVALUATE START POINT (Where is the line coming from?)
-            // ALIGNED: Using ConnectionEndpointType.Functoid from MappingProject.cs
-            if (conn.Source.Type == ConnectionEndpointType.Functoid && conn.Source.FunctoidInstanceId != null) {
+            if (startPt.IsEmpty || endPt.IsEmpty) continue;
 
-                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
-                var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Source.FunctoidInstanceId);
-                if (instance != null) {
-                    startX = centerLeft + instance.X + instance.Width; // Starts at right edge of functoid
-                    startY = instance.Y + (instance.Height / 2f);
-                } else continue;
-            } else // Fallback: It's a Source Tree Node
-              {
-                startY = FindNodeY(SourceRoot, conn.Source.NodePath);
-                startX = leftTreeWidth - 25f; // Center-right of source node row
-                if (startY == -1) continue;
-            }
-
-            // 2. EVALUATE END POINT (Where is the line going to?)
-            // ALIGNED: Using ConnectionEndpointType.Functoid from MappingProject.cs
-            if (conn.Target.Type == ConnectionEndpointType.Functoid && conn.Target.FunctoidInstanceId != null) {
-                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
-                var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Target.FunctoidInstanceId);
-                if (instance != null) {
-                    endX = centerLeft + instance.X; // Ends at left edge of functoid
-                    endY = instance.Y + (instance.Height / 2f);
-                } else continue;
-            } else // Fallback: It's a Destination Tree Node
-              {
-                endY = FindNodeY(DestinationRoot, conn.Target.NodePath);
-                endX = Width - rightTreeWidth + 5f; // Left edge of destination node row
-                if (endY == -1) continue;
-            }
-
-            // 3. DRAW CURVE
             using var path = new SKPath();
-            path.MoveTo(startX, startY);
+            path.MoveTo(startPt.X, startPt.Y);
 
-            float controlOffset = Math.Max(30f, Math.Abs(endX - startX) * 0.5f);
-            path.CubicTo(startX + controlOffset, startY, endX - controlOffset, endY, endX, endY);
-            canvas.DrawPath(path, linePaint);
+            float deltaX = Math.Abs(endPt.X - startPt.X);
+            float controlOffset = Math.Max(30f, deltaX * 0.5f);
+
+            path.CubicTo(
+                startPt.X + controlOffset, startPt.Y,
+                endPt.X - controlOffset, endPt.Y,
+                endPt.X, endPt.Y
+            );
+
+            canvas.DrawPath(path, wirePaint);
         }
     }
+
     #endregion Paint and Render methods
     private SKColor GetCategoryColor(string colorName) {
         if (string.IsNullOrEmpty(colorName)) return SKColors.LightGray;
@@ -1315,16 +1428,65 @@ public class SkiaMapperControl : SKControl {
 
         return $"Transform_{functoidName.Replace(" ", "")}_{functoidId}";
     }
+
+    private SKPoint GetSourceEndpointLocation(ConnectionEndpoint source) {
+        if (source == null) return SKPoint.Empty;
+
+        // Source is an XML element node from the Left Tree Panel
+        if (source.Type == ConnectionEndpointType.SourceNode) {
+            if (_sourceNodeYCache.TryGetValue(source.NodePath, out float exactY)) {
+                return new SKPoint(leftTreeWidth, exactY);
+            }
+            return SKPoint.Empty; // Hide wire if node is collapsed/hidden
+        }
+
+        // Source is an outbound port (Right Side Edge) of a canvas functoid
+        if (source.Type == ConnectionEndpointType.Functoid && source.FunctoidInstanceId.HasValue) {
+            var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == source.FunctoidInstanceId.Value);
+            if (instance != null) {
+                float absoluteX = leftTreeWidth + instance.X + instance.Width;
+                float absoluteY = instance.Y + (instance.Height / 2f);
+                return new SKPoint(absoluteX, absoluteY);
+            }
+        }
+
+        return SKPoint.Empty;
+    }
+
+    private SKPoint GetTargetEndpointLocation(ConnectionEndpoint target) {
+        if (target == null) return SKPoint.Empty;
+
+        // Target is a destination tree schema node in the Right Tree Panel
+        if (target.Type == ConnectionEndpointType.DestinationNode) {
+            if (_destinationNodeYCache.TryGetValue(target.NodePath, out float exactY)) {
+                float absoluteX = Width - rightTreeWidth;
+                return new SKPoint(absoluteX, exactY);
+            }
+            return SKPoint.Empty; // Hide wire if node is collapsed/hidden
+        }
+
+        // Target is an input port slice (Left Side Edge) of a canvas functoid
+        if (target.Type == ConnectionEndpointType.Functoid && target.FunctoidInstanceId.HasValue) {
+            var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == target.FunctoidInstanceId.Value);
+            if (instance != null) {
+                float absoluteX = leftTreeWidth + instance.X;
+                float absoluteY = GetFunctoidInputSlotY(instance, target.InputIndex);
+                return new SKPoint(absoluteX, absoluteY);
+            }
+        }
+
+        return SKPoint.Empty;
+    }
+
+    #region OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
     protected override void OnMouseUp(MouseEventArgs e) {
         float centerLeft = leftTreeWidth;
         float centerRight = Width - rightTreeWidth;
         float mainContentHeight = Height - logPanelHeight;
 
         // --- 1. PALETTE DROP HANDLER: Add new Functoid to Workspace Canvas ---
-        // --- 1. PALETTE DROP HANDLER: Add new Functoid to Workspace Canvas ---
         if (draggingPaletteFunctoid != null) {
             if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
-
                 float localX = (e.X - centerLeft) - paletteItemDragOffset.X;
                 float localY = e.Y - paletteItemDragOffset.Y;
 
@@ -1333,13 +1495,19 @@ public class SkiaMapperControl : SKControl {
                 if (localY < 0) localY = 0;
                 if (localY + 36f > mainContentHeight) localY = mainContentHeight - 36f;
 
-                // FIX: Extract clean function name from the ScriptTemplate content
-                // e.g. "public string StringLeft(...)" -> target name is "StringLeft"
                 string defaultMethodName = ExtractMethodNameFromTemplate(
                     draggingPaletteFunctoid.ScriptTemplate,
                     draggingPaletteFunctoid.Name,
                     draggingPaletteFunctoid.Id
                 );
+
+                // CRITICAL BUG FIX: Prior to binding, cross-examine the dropped template code.
+                // If the tree/palette dropped a definition with a default of '1', 
+                // re-run Roslyn analysis right here to recover the true method signature port count.
+                if (draggingPaletteFunctoid.InputParametersCount <= 1 && !string.IsNullOrWhiteSpace(draggingPaletteFunctoid.ScriptTemplate)) {
+                    var constraints = FunctoidAnalyzer.AnalyzeTemplate(draggingPaletteFunctoid.ScriptTemplate);
+                    draggingPaletteFunctoid.InputParametersCount = constraints.InitialSlots;
+                }
 
                 var newInstance = new FunctoidInstance {
                     Id = Guid.NewGuid(),
@@ -1348,8 +1516,6 @@ public class SkiaMapperControl : SKControl {
                     Width = 110f,
                     Height = 36f,
                     Definition = draggingPaletteFunctoid,
-
-                    // CRITICAL FIX: Pull your complete CDATA script straight out of the XML configuration
                     CustomScriptBody = draggingPaletteFunctoid.ScriptTemplate?.Trim(),
                     CustomMethodName = defaultMethodName
                 };
@@ -1362,6 +1528,7 @@ public class SkiaMapperControl : SKControl {
             Invalidate();
             return;
         }
+
         // --- 2. MAP CONNECTION TRACE WIRE HANDLER ---
         if (dragSource != null) {
             ConnectionEndpoint? dragTarget = null;
@@ -1372,7 +1539,9 @@ public class SkiaMapperControl : SKControl {
                 if (targetedNode != null) {
                     dragTarget = new ConnectionEndpoint {
                         Type = ConnectionEndpointType.DestinationNode,
-                        NodePath = targetedNode.Name
+                        NodePath = targetedNode.Name,
+                        InputIndex = 0,
+                        ArgumentIndex = 0
                     };
                 }
             }
@@ -1382,11 +1551,31 @@ public class SkiaMapperControl : SKControl {
                     float absoluteX = centerLeft + instance.X;
                     SKRect itemRect = new SKRect(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
 
-                    // Clicking/releasing on the left half represents an Input connection
+                    // Releasing mouse over the input processing boundary (left half zone)
                     if (itemRect.Contains(e.X, e.Y) && e.X <= itemRect.MidX) {
+
+                        // Determine exact slot selection using the updated bounds tracking logic
+                        int maxParams = GetFunctoidInputCount(instance);
+
+                        // Defensive guard to prevent division by zero errors if a template is malformed
+                        int safeMaxParams = maxParams > 0 ? maxParams : 1;
+
+                        float relativeY = e.Y - instance.Y;
+                        float sectorHeight = instance.Height / safeMaxParams;
+                        int calculatedSlotIndex = (int)(relativeY / sectorHeight);
+
+                        if (calculatedSlotIndex < 0) calculatedSlotIndex = 0;
+                        if (calculatedSlotIndex >= safeMaxParams) calculatedSlotIndex = safeMaxParams - 1;
+
+                        // Assign or overwrite to enforce a strict 1-wire-per-slot limit
+                        AssignInputParameter(instance, dragSource, calculatedSlotIndex);
+
                         dragTarget = new ConnectionEndpoint {
                             Type = ConnectionEndpointType.Functoid,
-                            FunctoidInstanceId = instance.Id
+                            FunctoidInstanceId = instance.Id,
+                            NodePath = string.Empty,
+                            InputIndex = calculatedSlotIndex,
+                            ArgumentIndex = calculatedSlotIndex
                         };
                         break;
                     }
@@ -1400,7 +1589,21 @@ public class SkiaMapperControl : SKControl {
                                   dragSource.FunctoidInstanceId == dragTarget.FunctoidInstanceId;
 
                 if (!isSelfLoop) {
-                    // Multi-connection constraint lifted: we bypass duplication filters entirely
+                    // Ensure existing connection tracing lists drop older wires targeting this precise slot index
+                    if (this.Connections != null) {
+                        var duplicateWire = this.Connections.FirstOrDefault(c =>
+                            c.Target != null &&
+                            c.Target.Type == dragTarget.Type &&
+                            (dragTarget.Type == ConnectionEndpointType.Functoid
+                                ? (c.Target.FunctoidInstanceId == dragTarget.FunctoidInstanceId && c.Target.InputIndex == dragTarget.InputIndex)
+                                : (c.Target.NodePath == dragTarget.NodePath))
+                        );
+
+                        if (duplicateWire != null) {
+                            this.Connections.Remove(duplicateWire);
+                        }
+                    }
+
                     Connections.Add(new MappingConnection {
                         Source = dragSource,
                         Target = dragTarget
@@ -1420,6 +1623,9 @@ public class SkiaMapperControl : SKControl {
         isResizingLeft = false;
         isResizingRight = false;
     }
+
+    #endregion 1396 OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
+
     /// <summary>
     /// Serializes the active canvas functoids and wire links into an XML string.
     /// </summary>
@@ -1478,31 +1684,29 @@ public class SkiaMapperControl : SKControl {
             throw;
         }
     }
-    public void AssignInputParameter(FunctoidInstance targetFunctoid, ConnectionEndpoint dragSource, float dropY) {
-        // 1. Determine how many parameters this functoid can accept
-        // (Fallback to 1 if not explicitly declared in your XML definition asset)
-        int maxParams = targetFunctoid.Definition?.InputParametersCount ?? 1;
-        // 2. Calculate which parameter slot index the user was targeting based on drop height
-        float relativeY = dropY - targetFunctoid.Y;
-        float sectorHeight = targetFunctoid.Height / maxParams;
-        int targetIndex = (int)(relativeY / sectorHeight);
-        // Guard bounds safety
-        if (targetIndex < 0) targetIndex = 0;
-        if (targetIndex >= maxParams) targetIndex = maxParams - 1;
-        // 3. Build the parameter assignment descriptor
+
+    private void AssignInputParameter(FunctoidInstance targetFunctoid, ConnectionEndpoint dragSource, int targetIndex) {
+        if (dragSource.Type == ConnectionEndpointType.Functoid && dragSource.FunctoidInstanceId == targetFunctoid.Id) {
+            return; // Block execution loops
+        }
+
         var parameterAssignment = new FunctoidParameter {
             Index = targetIndex
         };
+
         if (dragSource.Type == ConnectionEndpointType.SourceNode) {
             parameterAssignment.SourceType = ParameterSourceType.SourceSchemaNode;
             parameterAssignment.SourceNodePath = dragSource.NodePath;
         } else if (dragSource.Type == ConnectionEndpointType.Functoid) {
-            // Prevent cyclic self-linking loops
-            if (dragSource.FunctoidInstanceId == targetFunctoid.Id) return;
             parameterAssignment.SourceType = ParameterSourceType.FunctoidOutput;
             parameterAssignment.SourceFunctoidId = dragSource.FunctoidInstanceId;
         }
-        // 4. Save or overwrite the slot connection mapping state
+
+        if (targetFunctoid.ConnectedParameters == null) {
+            targetFunctoid.ConnectedParameters = new Dictionary<int, FunctoidParameter>();
+        }
+
+        // Overwrites old slot parameter mapping to ensure a strict 1-wire limit per slot
         targetFunctoid.ConnectedParameters[targetIndex] = parameterAssignment;
     }
 }

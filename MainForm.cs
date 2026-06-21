@@ -19,28 +19,52 @@ namespace SkiaMapper {
             // 2. Build our dynamic layout hierarchy
             InitializeCustomMapper();
         }
+
         private void LoadBuiltInFunctoids() {
             try {
                 string functoidsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BuiltInFunctoids.xml");
 
-                if (File.Exists(functoidsPath)) {
-                    XmlSerializer serializer = new XmlSerializer(typeof(FunctoidContainer));
-                    using (StreamReader reader = new StreamReader(functoidsPath)) {
-                        FunctoidContainer? container = (FunctoidContainer?)serializer.Deserialize(reader);
+                if (!File.Exists(functoidsPath)) {
+                    return;
+                }
 
-                        if (container != null) {
-                            // 1. Clear any active preview instances from the canvas grid to keep it pristine
-                            mapperControl.ActiveFunctoids.Clear();
+                XmlSerializer serializer = new XmlSerializer(typeof(FunctoidContainer));
+                using (StreamReader reader = new StreamReader(functoidsPath)) {
+                    FunctoidContainer? container = (FunctoidContainer?)serializer.Deserialize(reader);
 
-                            // 2. Bind categories to populate colored layout groupings inside the palette
-                            mapperControl.FunctoidCategories = container.Categories;
+                    if (container != null) {
+                        // 1. Clear active canvas preview states to ensure clean viewport instantiation
+                        mapperControl.ActiveFunctoids.Clear();
 
-                            // 3. Bind ALL 8 loaded functoid definitions strictly to the floating tool palette
-                            mapperControl.AvailableFunctoids = container.Functoids;
+                        // 2. Map structural layout categories directly into the palette panel grouping view
+                        mapperControl.FunctoidCategories = container.Categories;
 
-                            // 4. Trigger immediate window refresh repaint pass
-                            mapperControl.Invalidate();
+                        // --- ROSLYN METADATA ANALYSIS STEP ---
+                        // 3. Inspect every custom code block signature to resolve its input port metrics
+                        if (container.Functoids != null) {
+                            foreach (var functoidDef in container.Functoids) {
+                                if (string.IsNullOrWhiteSpace(functoidDef.ScriptTemplate)) {
+                                    functoidDef.InputParametersCount = 1; // Standard defensive fallback
+                                    continue;
+                                }
+
+                                // Parse the raw CDATA C# block using Roslyn syntax trees
+                                var constraints = FunctoidAnalyzer.AnalyzeTemplate(functoidDef.ScriptTemplate);
+
+                                // Enforce the true structural signature parameter count onto the definition
+                                functoidDef.InputParametersCount = constraints.InitialSlots;
+
+                                // OPTIONAL EXTENSION: If your definition model exposes a flag for variable lengths (params),
+                                // you can bind it directly like this:
+                                // functoidDef.IsVariableLengthInput = constraints.IsVariable;
+                            }
                         }
+
+                        // 4. Bind the processed, statically typed definitions to your floating tool palette items list
+                        mapperControl.AvailableFunctoids = container.Functoids;
+
+                        // 5. Fire an immediate invalidate repaint target pass down to the SkiaSharp control surface
+                        mapperControl.Invalidate();
                     }
                 }
             } catch (Exception ex) {
@@ -48,6 +72,7 @@ namespace SkiaMapper {
                                 "Functoid Layout Sync Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
         protected override void OnLoad(EventArgs e) {
             base.OnLoad(e);
 
