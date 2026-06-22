@@ -1,30 +1,32 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
-    <PackageReference Include="SkiaSharp" Version="3.119.4" />
-    <PackageReference Include="SkiaSharp.Views.WindowsForms" Version="3.119.4" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
+		<PackageReference Include="SkiaSharp" Version="3.119.4" />
+		<PackageReference Include="SkiaSharp.Views.WindowsForms" Version="3.119.4" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <None Update="BuiltInFunctoids.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="DestinationUser.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="SourceProfile.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
+	<ItemGroup>
+		<None Update="BuiltInFunctoids.xml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+		<None Update="DestinationUser.xml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+		<None Update="SourceProfile.xml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+		<None Update="yy.xml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Remove="SkiaMapper.Tests\**\*.cs" />
+		<Content Remove="SkiaMapper.Tests\**\*" />
+		<EmbeddedResource Remove="SkiaMapper.Tests\**\*" />
+		<None Remove="SkiaMapper.Tests\**\*" />
+	</ItemGroup>
 
 </Project>

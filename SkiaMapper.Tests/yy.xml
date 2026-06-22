@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-16"?>
+<MappingProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" Version="1.0">
+  <ActiveFunctoids>
+    <FunctoidInstance>
+      <Id>190e94d4-1e4f-4cab-82e4-6d9ef6fe38c8</Id>
+      <X>126</X>
+      <Y>100</Y>
+      <Width>110</Width>
+      <Height>36</Height>
+      <Definition Id="110" name="String Left" catId="1" isVariable="false">
+        <MethodNameFormat>{0}.Substring(0, Math.Min({0}.Length, {1}))</MethodNameFormat>
+        <JoinOperator />
+        <ScriptTemplate>
+      public string StringLeft(string str, int length) {
+          if (string.IsNullOrEmpty(str)) return string.Empty;
+          return str.Substring(0, Math.Min(str.Length, length));
+      }
+      </ScriptTemplate>
+        <InputParametersCount>1</InputParametersCount>
+      </Definition>
+      <CustomScriptBody>public string StringLeft(string str) {
+          if (string.IsNullOrEmpty(str)) return string.Empty;
+          return str.Substring(0, Math.Min(str.Length, 5));
+      }</CustomScriptBody>
+      <CustomMethodName>StringLeft</CustomMethodName>
+    </FunctoidInstance>
+    <FunctoidInstance>
+      <Id>1a7b066d-a1be-4518-9e4c-6a7ebb8cf6f3</Id>
+      <X>285</X>
+      <Y>152</Y>
+      <Width>110</Width>
+      <Height>36</Height>
+      <Definition Id="100" name="Concatenate" catId="1" isVariable="false">
+        <MethodNameFormat>string.Concat({0})</MethodNameFormat>
+        <JoinOperator>, </JoinOperator>
+        <ScriptTemplate>
+      public string Concatenate(params string[] args) {
+          return string.Concat(args);
+      }
+      </ScriptTemplate>
+        <InputParametersCount>2</InputParametersCount>
+      </Definition>
+      <CustomScriptBody>public string Concatenate(params string[] args) {
+          return string.Concat(args);
+      }</CustomScriptBody>
+      <CustomMethodName>Concatenate</CustomMethodName>
+    </FunctoidInstance>
+  </ActiveFunctoids>
+  <Connections>
+    <MappingConnection>
+      <Id>b3429711-062e-49bd-8feb-c72d26cbc033</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>FirstName</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>190e94d4-1e4f-4cab-82e4-6d9ef6fe38c8</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>e0a46e1b-833d-46b8-b4ee-03d21d8756e2</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>190e94d4-1e4f-4cab-82e4-6d9ef6fe38c8</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>1a7b066d-a1be-4518-9e4c-6a7ebb8cf6f3</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>5d4d221e-1d02-4017-b6bc-7387efdae162</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>LastName</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>1a7b066d-a1be-4518-9e4c-6a7ebb8cf6f3</FunctoidInstanceId>
+        <InputIndex>1</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>b0ba4cdb-6d49-497f-b71f-cb3b15e240b8</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>1a7b066d-a1be-4518-9e4c-6a7ebb8cf6f3</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>FullName</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+  </Connections>
+</MappingProject>

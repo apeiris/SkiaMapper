@@ -141,21 +141,41 @@ namespace SkiaMapper {
             }
         }
 
-        private SchemaNode BuildSchemaTreeFromXml(XmlElement xmlElement) {
+        private SchemaNode BuildSchemaTreeFromXml(XmlElement xmlElement, int currentDepth = 0) {
             string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
                 ? xmlElement.LocalName
                 : $"{xmlElement.Prefix}:{xmlElement.LocalName}";
 
             SchemaNode treeNode = new SchemaNode {
                 Name = nodeDisplayName,
-                Namespace = xmlElement.NamespaceURI,
                 IsAttribute = false,
-                IsExpanded = true
+                IsExpanded = true,
+                Depth = currentDepth // <-- ASSIGN DEPTH
             };
 
+            // Attribute Parsing Pass
+            if (xmlElement.Attributes != null) {
+                foreach (XmlAttribute attr in xmlElement.Attributes) {
+                    if (attr.Prefix == "xmlns" || attr.LocalName == "xmlns") continue;
+
+                    string attrDisplayName = string.IsNullOrEmpty(attr.Prefix)
+                        ? $"@{attr.LocalName}"
+                        : $"@{attr.Prefix}:{attr.LocalName}";
+
+                    treeNode.Children.Add(new SchemaNode {
+                        Name = attrDisplayName,
+                        IsAttribute = true,
+                        IsExpanded = false,
+                        Depth = currentDepth + 1 // <-- ATTR IS ONE LEVEL DEEPER
+                    });
+                }
+            }
+
+            // Child Element Parsing Pass
             foreach (XmlNode childXml in xmlElement.ChildNodes) {
                 if (childXml is XmlElement childElement) {
-                    SchemaNode childTreeNode = BuildSchemaTreeFromXml(childElement);
+                    // Recurse and increment the depth tier level
+                    SchemaNode childTreeNode = BuildSchemaTreeFromXml(childElement, currentDepth + 1);
                     treeNode.Children.Add(childTreeNode);
                 }
             }

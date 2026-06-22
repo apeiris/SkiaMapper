@@ -341,20 +341,36 @@ public class SkiaMapperControl : SKControl {
 
     }
 
-    private int GetFunctoidInputCount(FunctoidInstance instance) {
-        if (instance == null) return 0;
+    public int GetFunctoidInputCount(FunctoidInstance instance) {
+        if (instance?.Definition == null) return 1;
 
-        // Use the newly compiled script parameters value count
-        int baseCount = instance.Definition?.InputParametersCount ?? 0;
+        // 1. Fetch initial baseline constraints parsed by your FunctoidAnalyzer
+        int baseCount = instance.Definition.InputParametersCount;
+        bool isVariadic = instance.Definition.IsVariable; // Make sure this property exists on your definition model
 
-        // If the dictionary tracking states are empty or cleared, count defaults to baseCount
+        // 2. Discover the highest index wire currently connected to this specific instance
         int maxConnectedIndex = -1;
-        if (instance.ConnectedParameters != null && instance.ConnectedParameters.Count > 0) {
-            maxConnectedIndex = instance.ConnectedParameters.Keys.Max();
+        if (Connections != null) {
+            var inputs = Connections.Where(c =>
+                c.Target != null &&
+                c.Target.Type == ConnectionEndpointType.Functoid &&
+                c.Target.FunctoidInstanceId == instance.Id);
+
+            if (inputs.Any()) {
+                maxConnectedIndex = inputs.Max(c => c.Target.InputIndex);
+            }
         }
 
-        int resolvedCount = Math.Max(baseCount, maxConnectedIndex + 1);
-        return resolvedCount > 0 ? resolvedCount : 0;
+        // 3. Resolve the rendering constraint
+        if (isVariadic) {
+            // If a params array, the card dynamically expands to open up an extra empty slot 
+            // ahead of the highest connected wire so the user can keep dragging more inputs!
+            return Math.Max(baseCount, maxConnectedIndex + 2);
+        }
+
+        // If a normal static method (e.g. Substring(string text, int length)), 
+        // strictly lock the port size to what Roslyn analyzed.
+        return baseCount;
     }
     private float GetFunctoidInputSlotY(FunctoidInstance instance, int slotIndex) {
         int totalSlots = GetFunctoidInputCount(instance);
@@ -471,47 +487,73 @@ public class SkiaMapperControl : SKControl {
 
         }
     }
-    private void RenderTreeElement(SKCanvas canvas, SchemaNode node, float x, ref float currentY, bool isSourceTree) {
-        using var font = new SKFont(SKTypeface.Default);
-        using var textPaint = new SKPaint { Color = SKColors.Black,  IsAntialias = true };
+    #region RenderTreeElement
+    private void RenderTreeElement(SKCanvas canvas, SchemaNode node, float currentX, ref float currentY, bool isSourceTree, int currentDepth = 0) {
+        using var font = new SKFont(SKTypeface.Default, 12f);
+        using var textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
         using var nodeBoxPaint = new SKPaint { Color = new SKColor(220, 230, 242), Style = SKPaintStyle.Fill };
         using var nodeBorderPaint = new SKPaint { Color = new SKColor(120, 150, 180), Style = SKPaintStyle.Stroke, StrokeWidth = 1f };
 
         float nodeHeight = 22f;
         float indentSpacing = 15f;
+        float panelWidth = isSourceTree ? leftTreeWidth : rightTreeWidth;
 
         // Calculate the precise visual center Y coordinate of this specific row item
         float visualCenterY = currentY + (nodeHeight / 2f);
-
         node.LastRenderedY = visualCenterY;
         node.LastRenderedHeight = nodeHeight;
 
-        // CACHE REGISTRATION: Save the exact screen coordinates for the wire anchors
+        // --- FIX 1: CACHE REGISTRATION BY UNIQUE IDENTIFIER ---
+        // If you haven't implemented a unique absolute path property yet, use node.Name for now,
+        // but a unique structural path string prevents name collision bugs on different nodes.
+        string cacheKey = node.Name;
         if (isSourceTree) {
-            // Left Panel Source Node: The anchor pin sits right on the edge of the panel divider line
-            _sourceNodeYCache[node.Name] = visualCenterY;
+            _sourceNodeYCache[cacheKey] = visualCenterY;
         } else {
-            // Right Panel Destination Node: The anchor pin sits right on the starting edge of the right divider line
-            _destinationNodeYCache[node.Name] = visualCenterY;
+            _destinationNodeYCache[cacheKey] = visualCenterY;
         }
 
-        SKRect rowRect = new SKRect(x, currentY, x + (isSourceTree ? leftTreeWidth : rightTreeWidth) - 30f, currentY + nodeHeight);
+        // --- FIX 2: CONSTRAIN THE ROW BOUNDS TO THE SPLITTER ---
+        // Instead of using 'currentX + panelWidth', anchor the left edge to the panel origin (0 for source, panel boundary for dest)
+        // and explicitly define the width boundary regardless of indentation depths.
+        float absoluteLeft = isSourceTree ? 4f : (Width - rightTreeWidth) + 4f;
+        float absoluteRight = isSourceTree ? (leftTreeWidth - 12f) : (Width - 4f);
+
+        SKRect rowRect = new SKRect(absoluteLeft, currentY, absoluteRight, currentY + nodeHeight);
+
+        // Save canvas state and apply a clipping mask to perfectly guard against long name overflows
+        canvas.Save();
+        canvas.ClipRect(rowRect);
+
+        // Draw row container background and borders
         canvas.DrawRoundRect(rowRect, 2f, 2f, nodeBoxPaint);
         canvas.DrawRoundRect(rowRect, 2f, 2f, nodeBorderPaint);
 
+        // --- FIX 3: INDENT ONLY THE TEXT AND EXPAND GLYPH ---
         string expandGlyph = node.Children.Count > 0 ? (node.IsExpanded ? "▼ " : "► ") : "  ";
-        //  canvas.DrawText($"{expandGlyph}{node.Name}", x + 6f, currentY + 16f, textPaint);
-        canvas.DrawText($"{expandGlyph}{node.Name}", x + 6f, currentY + 16f, font, textPaint);
+        float textStartX = absoluteLeft + 6f + (currentDepth * indentSpacing);
+
+        canvas.DrawText($"{expandGlyph}{node.Name}", textStartX, currentY + 16f, font, textPaint);
+
+        // Restore the canvas to release the clipping mask boundary
+        canvas.Restore();
 
         currentY += nodeHeight + 4f;
 
+        // --- FIX 4: RECURSIONS INCREMENT DEPTH INSTEAD OF SHIFTING BOX X BOUNDS ---
         if (node.IsExpanded) {
             foreach (var child in node.Children) {
-                RenderTreeElement(canvas, child, x + indentSpacing, ref currentY, isSourceTree);
+                // Keep currentX stable to avoid multiplying row bounds rightward
+                RenderTreeElement(canvas, child, currentX, ref currentY, isSourceTree, currentDepth + 1);
             }
         }
     }
+    #endregion RenderTreeElement 523
+
+    #region RenderFunctoidParameterConnections
     private void RenderFunctoidParameterConnections(SKCanvas canvas, float centerLeft) {
+        if (Connections == null || !Connections.Any()) return;
+
         using var wirePaint = new SKPaint {
             Color = new SKColor(52, 152, 219, 220), // Clean slate blue connection wire
             Style = SKPaintStyle.Stroke,
@@ -526,72 +568,70 @@ public class SkiaMapperControl : SKControl {
             IsAntialias = true
         };
 
-        // Loop through every live canvas element to look for assigned inbound parameters
-        foreach (var targetInstance in ActiveFunctoids) {
-            if (targetInstance.ConnectedParameters == null) continue;
+        // UNIFIED LOOP: Scan the global connections repository directly
+        foreach (var conn in Connections) {
+            // We only care about connections whose target landing endpoint is a canvas functoid
+            if (conn.Target == null || conn.Target.Type != ConnectionEndpointType.Functoid || !conn.Target.FunctoidInstanceId.HasValue) {
+                continue;
+            }
 
-            //int maxParams = targetInstance.Definition?.InputParameters?.Count ?? 1;
-            int maxParams = targetInstance.Definition?.InputParametersCount ?? 1; // <-- REVISED: Use direct count property for efficiency
+            // Locate the target functoid instance on the canvas matching the wire's destination reference
+            var targetInstance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Target.FunctoidInstanceId.Value);
+            if (targetInstance == null) continue;
 
+            // 1. Calculate Target Port Landing Coordinates
+            int maxParams = GetFunctoidInputCount(targetInstance); // Unified calculation helper
+            float sectorHeight = maxParams > 0 ? (targetInstance.Height / maxParams) : targetInstance.Height;
 
-            float sectorHeight = targetInstance.Height / maxParams;
             float targetAbsoluteX = centerLeft + targetInstance.X;
+            float targetX = targetAbsoluteX;
+            float targetY = targetInstance.Y + (conn.Target.InputIndex * sectorHeight) + (sectorHeight / 2f);
 
-            foreach (var kvp in targetInstance.ConnectedParameters) {
-                int paramIndex = kvp.Key;
-                FunctoidParameter parameter = kvp.Value;
+            float sourceX = 0f;
+            float sourceY = 0f;
+            bool validSourceFound = false;
 
-                if (parameter.SourceType == ParameterSourceType.Unlinked) continue;
-
-                // 1. Calculate Target Coordinates (Left edge of the box, centered vertically inside its assigned slot sector)
-                float targetX = targetAbsoluteX;
-                float targetY = targetInstance.Y + (paramIndex * sectorHeight) + (sectorHeight / 2f);
-
-                float sourceX = 0f;
-                float sourceY = 0f;
-                bool validSourceFound = false;
-
-                // 2. Resolve Source Coordinates based on connection origin variant
-                if (parameter.SourceType == ParameterSourceType.SourceSchemaNode) {
-                    // Find where the tree node layout tracker recorded its coordinates during the tree draw pass
-                    SchemaNode? schemaNode = FindNodeByPath(SourceRoot, parameter.SourceNodePath);
-                    if (schemaNode != null) {
-                        sourceX = leftTreeWidth - 16f; // Origin point matching the tree layout anchor bounds
-                        sourceY = schemaNode.LastRenderedY;
-                        validSourceFound = true;
-                    }
-                } else if (parameter.SourceType == ParameterSourceType.FunctoidOutput) {
-                    // Find the predecessor block on the active visual surface
-                    var sourceInstance = ActiveFunctoids.FirstOrDefault(f => f.Id == parameter.SourceFunctoidId);
-                    if (sourceInstance != null) {
-                        sourceX = centerLeft + sourceInstance.X + sourceInstance.Width; // Originates at the center-right boundary
-                        sourceY = sourceInstance.Y + (sourceInstance.Height / 2f);
-                        validSourceFound = true;
-                    }
+            // 2. Resolve Source Origin Coordinates based on the connection source type
+            if (conn.Source.Type == ConnectionEndpointType.SourceNode) {
+                // Find where the tree node layout tracker recorded its coordinates during the tree draw pass
+                SchemaNode? schemaNode = FindNodeByPath(SourceRoot, conn.Source.NodePath);
+                if (schemaNode != null) {
+                    sourceX = leftTreeWidth - 16f; // Origin point matching the tree layout anchor bounds
+                    sourceY = schemaNode.LastRenderedY;
+                    validSourceFound = true;
                 }
-
-                // 3. Draw the Cubic Bezier Routing Wire
-                if (validSourceFound) {
-                    using var path = new SKPath();
-                    path.MoveTo(sourceX, sourceY);
-
-                    // Calculate smooth visual control vectors based on layout distance
-                    float controlOffset = Math.Max(30f, Math.Abs(targetX - sourceX) * 0.5f);
-                    path.CubicTo(
-                        sourceX + controlOffset, sourceY, // First Bezier handle
-                        targetX - controlOffset, targetY, // Second Bezier handle
-                        targetX, targetY                  // Destination
-                    );
-
-                    canvas.DrawPath(path, wirePaint);
-
-                    // Draw tiny terminal joint nubs for crisp look and feel
-                    canvas.DrawCircle(sourceX, sourceY, 3f, jointPaint);
-                    canvas.DrawCircle(targetX, targetY, 3f, jointPaint);
+            } else if (conn.Source.Type == ConnectionEndpointType.Functoid && conn.Source.FunctoidInstanceId.HasValue) {
+                // Find the predecessor block on the active visual surface
+                var sourceInstance = ActiveFunctoids.FirstOrDefault(f => f.Id == conn.Source.FunctoidInstanceId.Value);
+                if (sourceInstance != null) {
+                    sourceX = centerLeft + sourceInstance.X + sourceInstance.Width; // Originates at the center-right boundary
+                    sourceY = sourceInstance.Y + (sourceInstance.Height / 2f);
+                    validSourceFound = true;
                 }
+            }
+
+            // 3. Draw the Cubic Bezier Routing Wire
+            if (validSourceFound) {
+                using var path = new SKPath();
+                path.MoveTo(sourceX, sourceY);
+
+                // Calculate smooth visual control vectors based on layout distance
+                float controlOffset = Math.Max(30f, Math.Abs(targetX - sourceX) * 0.5f);
+                path.CubicTo(
+                    sourceX + controlOffset, sourceY, // First Bezier handle
+                    targetX - controlOffset, targetY, // Second Bezier handle
+                    targetX, targetY                  // Destination
+                );
+
+                canvas.DrawPath(path, wirePaint);
+
+                // Draw tiny terminal joint nubs for crisp look and feel
+                canvas.DrawCircle(sourceX, sourceY, 3f, jointPaint);
+                canvas.DrawCircle(targetX, targetY, 3f, jointPaint);
             }
         }
     }
+    #endregion RenderFunctoidParameterConnections 605
     private SKColor GetFunctoidCategoryColor(FunctoidInstance instance) {
         if (instance?.Definition == null || FunctoidCategories == null) {
             return new SKColor(220, 225, 230); // Default neutral fallback color
@@ -1068,10 +1108,10 @@ public class SkiaMapperControl : SKControl {
                     using (var ofd = new OpenFileDialog { Filter = "XML Files (*.xml)|*.xml", DefaultExt = "xml", Title = "Load Mapping Schema" }) {
                         if (ofd.ShowDialog() == DialogResult.OK) {
                             LoadConfiguration(File.ReadAllText(ofd.FileName));
+                         
+                            this.FindForm()?.Text = $"Working on {ofd.FileName}";
+
                             isCanvasDirty = false;
-                            this.FindForm()?.Text = $"{this.FindForm()?.Text} -  Working on {ofd.FileName}";
-
-
                             Invalidate();
                         }
                     }
@@ -1460,51 +1500,32 @@ public class SkiaMapperControl : SKControl {
 
         // 1. Force Roslyn to re-parse the altered method signature code block
         string? updatedCode = instance.CustomScriptBody;
-        int parsedSlotsCount = 1; // Default fallback safety metric
+        int parsedSlotsCount = 0;
 
         if (!string.IsNullOrWhiteSpace(updatedCode)) {
             var constraints = FunctoidAnalyzer.AnalyzeTemplate(updatedCode);
             parsedSlotsCount = constraints.InitialSlots;
 
-            // Update the instance-level parameter profile tracker override
             if (instance.Definition != null) {
                 instance.Definition.InputParametersCount = parsedSlotsCount;
             }
         }
 
-        // 2. CRITICAL FIX: Explicitly target and clear tracking parameters out of the dictionary first.
-        // If we don't clear this dictionary first, GetFunctoidInputCount() continues to look at 
-        // old connection keys and will report the higher historical number!
-        if (instance.ConnectedParameters != null) {
-            var orphanedKeys = instance.ConnectedParameters.Keys
-                .Where(index => index >= parsedSlotsCount)
-                .ToList();
-
-            foreach (var badIndex in orphanedKeys) {
-                instance.ConnectedParameters.Remove(badIndex);
-            }
-        }
-
-        // 3. Recompute the definitive maximum allowable input slot metrics
-        int newMaxSlots = GetFunctoidInputCount(instance);
-
-        // 4. REVISED: Prune old layout tracing lines globally across your map connections list
+        // 2. Prune old layout tracing lines globally across your map connections list
         if (Connections != null) {
-            // Isolate obsolete connection links into a safe standalone snapshot list
             var obsoleteConnections = Connections.Where(connection =>
                 connection.Target != null &&
                 connection.Target.Type == ConnectionEndpointType.Functoid &&
                 connection.Target.FunctoidInstanceId == instance.Id &&
-                connection.Target.InputIndex >= parsedSlotsCount // Track against the raw parsed count
+                connection.Target.InputIndex >= parsedSlotsCount
             ).ToList();
 
-            // Safely wipe out each dead wire from the UI collection
             foreach (var connection in obsoleteConnections) {
                 Connections.Remove(connection);
             }
         }
 
-        // 5. Force SkiaSharp window frame redraw to update the UI instantly
+        // 3. Force SkiaSharp window frame redraw to update the UI instantly
         Invalidate();
     }
 
@@ -1569,16 +1590,16 @@ public class SkiaMapperControl : SKControl {
 
         return SKPoint.Empty;
     }
-
+    #region PruneOrphanedConnections
     public void PruneOrphanedConnections(FunctoidInstance instance) {
         if (instance == null || instance.Definition == null) return;
 
-        // Determine the actual new port count profile
+        // Determine the actual new port count profile after a script modification or parameter resize
         int newMaxSlots = instance.Definition.InputParametersCount;
 
         // 1. Look for global map wires that are now aiming at dead indexes and remove them safely
         if (Connections != null) {
-            // Isolate dead connections into a snapshot list first to satisfy ObservableCollection tracking
+            // Isolate dead connections into a snapshot list first to satisfy collection tracking modifications safely
             var obsoleteConnections = Connections.Where(c =>
                 c.Target != null &&
                 c.Target.Type == ConnectionEndpointType.Functoid &&
@@ -1591,22 +1612,13 @@ public class SkiaMapperControl : SKControl {
             }
         }
 
-        // 2. Wipe matching values from the runtime internal parameter dictionary
-        if (instance.ConnectedParameters != null) {
-            var obsoleteKeys = instance.ConnectedParameters.Keys
-                .Where(k => k >= newMaxSlots)
-                .ToList();
-
-            foreach (var key in obsoleteKeys) {
-                instance.ConnectedParameters.Remove(key);
-            }
-        }
+        // NOTE: The second pass that cleared local dictionaries has been completely removed.
+        // Because the global 'Connections' pool is now the single source of truth, removing 
+        // the wire from the list automatically breaks the layout binding on the Skia canvas.
     }
-
+    #endregion PruneOrphanedConnections 1596/1589
 
     #region OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
-
-
 
     protected override void OnMouseUp(MouseEventArgs e) {
         float centerLeft = leftTreeWidth;
@@ -1668,9 +1680,8 @@ public class SkiaMapperControl : SKControl {
                 if (targetedNode != null) {
                     dragTarget = new ConnectionEndpoint {
                         Type = ConnectionEndpointType.DestinationNode,
-                        NodePath = targetedNode.Name,
-                        InputIndex = 0,
-                        ArgumentIndex = 0
+                        NodePath = targetedNode.Name, // Destination mappings trace to target node identifiers
+                        InputIndex = 0
                     };
                 }
             }
@@ -1678,7 +1689,7 @@ public class SkiaMapperControl : SKControl {
             else if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
                 foreach (var instance in ActiveFunctoids) {
                     float absoluteX = centerLeft + instance.X;
-                    SKRect itemRect = new (absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
+                    SKRect itemRect = new(absoluteX, instance.Y, absoluteX + instance.Width, instance.Y + instance.Height);
 
                     // Releasing mouse over the input processing boundary (left half zone)
                     if (itemRect.Contains(e.X, e.Y) && e.X <= itemRect.MidX) {
@@ -1696,15 +1707,11 @@ public class SkiaMapperControl : SKControl {
                         if (calculatedSlotIndex < 0) calculatedSlotIndex = 0;
                         if (calculatedSlotIndex >= safeMaxParams) calculatedSlotIndex = safeMaxParams - 1;
 
-                        // Assign or overwrite to enforce a strict 1-wire-per-slot limit
-                        AssignInputParameter(instance, dragSource, calculatedSlotIndex);
-
                         dragTarget = new ConnectionEndpoint {
                             Type = ConnectionEndpointType.Functoid,
                             FunctoidInstanceId = instance.Id,
                             NodePath = string.Empty,
-                            InputIndex = calculatedSlotIndex,
-                            ArgumentIndex = calculatedSlotIndex
+                            InputIndex = calculatedSlotIndex
                         };
                         break;
                     }
@@ -1751,13 +1758,17 @@ public class SkiaMapperControl : SKControl {
         isResizingLog = false;
         isResizingLeft = false;
         isResizingRight = false;
+
+        // Check if scroll bar was active and cleanly turn off state tracking
+        if (isDraggingToolboxScrollbar) {
+            isDraggingToolboxScrollbar = false;
+            Capture = false;
+            Invalidate();
+        }
     }
+    #endregion 1396/1737 OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
 
-    #endregion 1396 OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
 
-    /// <summary>
-    /// Serializes the active canvas functoids and wire links into an XML string.
-    /// </summary>
     public string SaveConfiguration() {
         var state = new MappingProjectState {
             // --- REVISED: Extract data as standard Lists for serialization compatibility ---
@@ -1770,41 +1781,37 @@ public class SkiaMapperControl : SKControl {
         serializer.Serialize(xmlWriter, state);
         return stringWriter.ToString();
     }
-    /// <summary>
-    /// Deserializes an XML map configuration string and completely rehydrates the canvas layout.
-    /// </summary>
+    #region LoadConfiguration with Robust Rehydration and State Synchronization
     public void LoadConfiguration(string xmlContent) {
         if (string.IsNullOrWhiteSpace(xmlContent)) return;
         try {
             var serializer = new XmlSerializer(typeof(MappingProjectState));
             using var stringReader = new StringReader(xmlContent);
             if (serializer.Deserialize(stringReader) is MappingProjectState loadedState) {
-                // Clear existing layout records
+
+                // 1. Clear existing workspace layout records
                 this.ActiveFunctoids.Clear();
                 this.Connections.Clear();
-                // Rehydrate collections
+
+                // 2. Rehydrate Active Functoids into the ObservableCollection
                 if (loadedState.ActiveFunctoids != null) {
-                    // --- REVISED: Use a loop to populate the ObservableCollection ---
                     foreach (var functoid in loadedState.ActiveFunctoids) {
                         this.ActiveFunctoids.Add(functoid);
                     }
                 }
+
+                // 3. Rehydrate Map Connections into the ObservableCollection
                 if (loadedState.Connections != null) {
-                    // Rehydrate the input index lookup safety map
-                    foreach (var conn in loadedState.Connections) {
-                        if (conn.Target != null) {
-                            // Sync our InputIndex property helper back to ArgumentIndex
-                            conn.Target.InputIndex = conn.Target.ArgumentIndex;
-                        }
-                    }
-                    if (loadedState.Connections != null) {
-                        // --- REVISED: Use a loop to populate the ObservableCollection ---
-                        foreach (var connection in loadedState.Connections) {
-                            this.Connections.Add(connection);
-                        }
+                    // NOTE: The legacy index synchronization loops have been removed. 
+                    // InputIndex handles serialization and tracking natively now.
+                    foreach (var connection in loadedState.Connections) {
+                        this.Connections.Add(connection);
                     }
                 }
+
+                // 4. Reset modified state flags and force a workspace UI redraw
                 this.isCanvasDirty = false;
+
                 // Force SkiaSharp to repaint the newly hydrated layout elements immediately
                 this.Invalidate();
             }
@@ -1813,29 +1820,8 @@ public class SkiaMapperControl : SKControl {
             throw;
         }
     }
+    #endregion LoadConfiguration 1795
+    #region AssignInputParameter with Slot Index Validation and Loop Prevention
 
-    private void AssignInputParameter(FunctoidInstance targetFunctoid, ConnectionEndpoint dragSource, int targetIndex) {
-        if (dragSource.Type == ConnectionEndpointType.Functoid && dragSource.FunctoidInstanceId == targetFunctoid.Id) {
-            return; // Block execution loops
-        }
-
-        var parameterAssignment = new FunctoidParameter {
-            Index = targetIndex
-        };
-
-        if (dragSource.Type == ConnectionEndpointType.SourceNode) {
-            parameterAssignment.SourceType = ParameterSourceType.SourceSchemaNode;
-            parameterAssignment.SourceNodePath = dragSource.NodePath;
-        } else if (dragSource.Type == ConnectionEndpointType.Functoid) {
-            parameterAssignment.SourceType = ParameterSourceType.FunctoidOutput;
-            parameterAssignment.SourceFunctoidId = dragSource.FunctoidInstanceId;
-        }
-
-        if (targetFunctoid.ConnectedParameters == null) {
-            targetFunctoid.ConnectedParameters = new Dictionary<int, FunctoidParameter>();
-        }
-
-        // Overwrites old slot parameter mapping to ensure a strict 1-wire limit per slot
-        targetFunctoid.ConnectedParameters[targetIndex] = parameterAssignment;
-    }
+    #endregion   AssignInputParameter 1819
 }
