@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="README.MD" />
+  </Folder>
+  <Project Path="SkiaMapper.csproj" />
+  <Project Path="SkiaMapper.Tests/SkiaMapper.Tests.csproj" Id="56577d9f-cce1-48c8-b75d-649dcf2d1ec7" />
+</Solution>
