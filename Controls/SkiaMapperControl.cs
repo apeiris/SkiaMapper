@@ -56,6 +56,8 @@ public class SkiaMapperControl : SKControl {
     private MappingConnection? contextTargetConnection = null;
     private float toolboxVirtualScrollY = 0f;
     private float maxToolboxContentHeight = 0f;
+    // Hit-test boundary for the Source File Ellipsis Picker Button
+    private SKRect sourceFileEllipsisRect;
 #pragma warning disable CS0414
     private bool isDraggingToolboxScrollbar = false;
 #pragma warning restore CS0414
@@ -518,24 +520,78 @@ public class SkiaMapperControl : SKControl {
         // -------------------------------------------------------------------------
         // LEFT PANEL HEADER LABEL: "Source Document"
         // -------------------------------------------------------------------------
+        //float headerHeight = 32f;
+        //SKRect leftHeaderRect = new SKRect(0, 0, leftTreeWidth, headerHeight);
+
+        //// Draw header background bar
+        //using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+        //    canvas.DrawRect(leftHeaderRect, headerBg);
+        //}
+
+        //// Draw header bottom border line
+        //using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
+        //    canvas.DrawLine(0, headerHeight, leftTreeWidth, headerHeight, headerBorder);
+        //}
+
+        //// Render "Source Document" label text
+        //using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
+        //using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+        //    canvas.DrawText("Source Document", 12f, 21f, headerFont, headerTextPaint);
+        //}
+
+        //--------------------------------------------
+        // -------------------------------------------------------------------------
+        // LEFT PANEL HEADER LABEL: "Source Document" + Ellipsis Picker
+        // -------------------------------------------------------------------------
         float headerHeight = 32f;
         SKRect leftHeaderRect = new SKRect(0, 0, leftTreeWidth, headerHeight);
 
-        // Draw header background bar
+        // 1. Draw header background bar
         using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
             canvas.DrawRect(leftHeaderRect, headerBg);
         }
 
-        // Draw header bottom border line
+        // 2. Draw header bottom border line
         using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
             canvas.DrawLine(0, headerHeight, leftTreeWidth, headerHeight, headerBorder);
         }
 
-        // Render "Source Document" label text
-        using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
-        using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
-            canvas.DrawText("Source Document", 12f, 21f, headerFont, headerTextPaint);
+        // 3. Define and draw the Ellipsis (...) Button on the far right of the header
+        float btnWidth = 24f;
+        float btnHeight = 20f;
+        sourceFileEllipsisRect = new SKRect(
+            leftTreeWidth - btnWidth - 6f,
+            (headerHeight - btnHeight) / 2f,
+            leftTreeWidth - 6f,
+            (headerHeight + btnHeight) / 2f
+        );
+
+        using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
+        using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
+        using (var btnFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
+        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+            canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBorder);
+            canvas.DrawText("...", sourceFileEllipsisRect.MidX, sourceFileEllipsisRect.MidY + 4f, SKTextAlign.Center, btnFont, btnTextPaint);
         }
+
+        // 4. Format and clip the label text so it doesn't overlap the ellipsis button
+        string sourceLabelText = !string.IsNullOrWhiteSpace(MainForm.SourcePath)
+            ? $"Source: {System.IO.Path.GetFileName(MainForm.SourcePath)}"
+            : "Source Document";
+
+        SKRect labelClipRect = new SKRect(0, 0, sourceFileEllipsisRect.Left - 4f, headerHeight);
+
+        canvas.Save();
+        canvas.ClipRect(labelClipRect);
+
+        using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f))
+        using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+            canvas.DrawText(sourceLabelText, 12f, 21f, headerFont, headerTextPaint);
+        }
+
+        canvas.Restore();
+
 
         // -------------------------------------------------------------------------
         // RIGHT PANEL HEADER LABEL: "Destination Document"
@@ -1373,6 +1429,51 @@ public class SkiaMapperControl : SKControl {
         float centerRight = Width - rightTreeWidth;
         switch (e.Button) {
             case MouseButtons.Left:
+                if (sourceFileEllipsisRect.Contains(e.X, e.Y)) {
+                    using var ofd = new OpenFileDialog {
+                        Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
+                        Title = "Select Source Input XML Document"
+                    };
+
+                    if (ofd.ShowDialog() == DialogResult.OK) {
+                        MainForm.SourcePath = ofd.FileName;
+
+                        // 1. Clear active canvas and connection state
+                        ActiveFunctoids.Clear();
+                        Connections.Clear();
+                        dragSource = null;
+                        draggingCanvasInstance = null;
+                        selectedCanvasInstance = null;
+                        selectedConnection = null;
+                        contextTargetInstance = null;
+                        contextTargetConnection = null;
+
+                        // 2. Reload and reparse the source schema tree using MainForm's parser
+                        try {
+                            this.SourceRoot = MainForm.LoadSchemaFromFile(ofd.FileName);
+                        } catch (Exception ex) {
+                            MessageBox.Show(
+                                $"Failed to load source schema tree:\n{ex.Message}",
+                                "Schema Load Error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error
+                            );
+                            this.SourceRoot = null;
+                        }
+
+                        // 3. Reset workspace state flags and repaint
+                        isCanvasDirty = false;
+                        Invalidate(); // Repaint canvas header and left tree panel
+                    }
+                    return;
+                }
+
+                    // 1. Priority Intercept: Tool Palette Floating Overlay Window
+                    if (paletteBounds.Contains(e.X, e.Y)) {
+                    ProcessLeftClickToolPalette(e);
+                    return;
+                }
+
                 // 1. Priority Intercept: Tool Palette Floating Overlay Window
                 if (paletteBounds.Contains(e.X, e.Y)) {
                     ProcessLeftClickToolPalette(e);

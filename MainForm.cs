@@ -11,7 +11,7 @@ namespace SkiaMapper {
     public partial class MainForm : Form {
 
         // Static Path Accessors
-        public static string SourcePath { get; private set; } = string.Empty;
+        public static string SourcePath { get;  set; } = string.Empty;
         public static string DestinationPath { get; private set; } = string.Empty;
         public static string XsltPath { get; set; } = string.Empty;
 
@@ -189,6 +189,56 @@ namespace SkiaMapper {
             }
         }
 
+        public static SchemaNode? LoadSchemaFromFile(string filePath) {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+                return null;
+
+            XmlDocument doc = new XmlDocument();
+            doc.Load(filePath);
+
+            return doc.DocumentElement != null
+                ? BuildSchemaTreeFromXmlStatic(doc.DocumentElement)
+                : null;
+        }
+
+        private static SchemaNode BuildSchemaTreeFromXmlStatic(XmlElement xmlElement, int currentDepth = 0) {
+            string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
+                ? xmlElement.LocalName
+                : $"{xmlElement.Prefix}:{xmlElement.LocalName}";
+
+            SchemaNode treeNode = new SchemaNode {
+                Name = nodeDisplayName,
+                IsAttribute = false,
+                IsExpanded = true,
+                Depth = currentDepth
+            };
+
+            if (xmlElement.Attributes != null) {
+                foreach (XmlAttribute attr in xmlElement.Attributes) {
+                    if (attr.Prefix == "xmlns" || attr.LocalName == "xmlns") continue;
+
+                    string attrDisplayName = string.IsNullOrEmpty(attr.Prefix)
+                        ? $"@{attr.LocalName}"
+                        : $"@{attr.Prefix}:{attr.LocalName}";
+
+                    treeNode.Children.Add(new SchemaNode {
+                        Name = attrDisplayName,
+                        IsAttribute = true,
+                        IsExpanded = false,
+                        Depth = currentDepth + 1
+                    });
+                }
+            }
+
+            foreach (XmlNode childXml in xmlElement.ChildNodes) {
+                if (childXml is XmlElement childElement) {
+                    SchemaNode childTreeNode = BuildSchemaTreeFromXmlStatic(childElement, currentDepth + 1);
+                    treeNode.Children.Add(childTreeNode);
+                }
+            }
+
+            return treeNode;
+        }
         private SchemaNode BuildSchemaTreeFromXml(XmlElement xmlElement, int currentDepth = 0) {
             string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
                 ? xmlElement.LocalName
