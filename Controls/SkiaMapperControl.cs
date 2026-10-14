@@ -16,6 +16,12 @@ using static System.Net.WebRequestMethods;
 namespace SkiaMapper.Controls;
 
 public class SkiaMapperControl : SKControl {
+    public enum PaintArea {
+        LeftPanel,
+        MiddlePanel,
+        RightPanel,
+        LogPanel
+    }
     // Panel Dimension Metrics (Splitters)
     private float leftTreeWidth = 280f;
     private float rightTreeWidth = 280f;
@@ -487,7 +493,8 @@ public class SkiaMapperControl : SKControl {
         }
     }
     #endregion RenderTreeElement 523
-
+    // ==========================================================================
+    /*
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
 
         if (DesignMode || LicenseManager.UsageMode == LicenseUsageMode.Designtime) {
@@ -517,29 +524,6 @@ public class SkiaMapperControl : SKControl {
         bgPaint.Color = new SKColor(30, 30, 30);
         canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
 
-        // -------------------------------------------------------------------------
-        // LEFT PANEL HEADER LABEL: "Source Document"
-        // -------------------------------------------------------------------------
-        //float headerHeight = 32f;
-        //SKRect leftHeaderRect = new SKRect(0, 0, leftTreeWidth, headerHeight);
-
-        //// Draw header background bar
-        //using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
-        //    canvas.DrawRect(leftHeaderRect, headerBg);
-        //}
-
-        //// Draw header bottom border line
-        //using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
-        //    canvas.DrawLine(0, headerHeight, leftTreeWidth, headerHeight, headerBorder);
-        //}
-
-        //// Render "Source Document" label text
-        //using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
-        //using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
-        //    canvas.DrawText("Source Document", 12f, 21f, headerFont, headerTextPaint);
-        //}
-
-        //--------------------------------------------
         // -------------------------------------------------------------------------
         // LEFT PANEL HEADER LABEL: "Source Document" + Ellipsis Picker
         // -------------------------------------------------------------------------
@@ -696,7 +680,193 @@ public class SkiaMapperControl : SKControl {
 
         }
     }
+    */
 
+    protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
+        if (DesignMode || LicenseManager.UsageMode == LicenseUsageMode.Designtime) {
+            // Render simple placeholder text or skip Skia render initialization
+            return;
+        }
+
+        base.OnPaintSurface(e);
+        _sourceNodeYCache.Clear();
+        _destinationNodeYCache.Clear();
+        var canvas = e.Surface.Canvas;
+        int w = e.Info.Width;
+        int h = e.Info.Height;
+        canvas.Clear(SKColors.White);
+
+        float centerLeft = leftTreeWidth;
+        float centerRight = w - rightTreeWidth;
+        float mainContentHeight = h - logPanelHeight;
+        float headerHeight = 32f;
+
+        using var bgPaint = new SKPaint();
+
+        // 1. Render core viewport panels and headers using a switch statement
+        foreach (PaintArea area in Enum.GetValues<PaintArea>()) {
+            switch (area) {
+                case PaintArea.LeftPanel:
+                    // Left Viewport Background
+                    bgPaint.Color = SKColors.GhostWhite;
+                    canvas.DrawRect(0, 0, leftTreeWidth, mainContentHeight, bgPaint);
+                    // Left Panel Header & Ellipsis Picker
+                    SKRect leftHeaderRect = new SKRect(0, 0, leftTreeWidth, headerHeight);
+                    using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+                        canvas.DrawRect(leftHeaderRect, headerBg);
+                    }
+                    using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
+                        canvas.DrawLine(0, headerHeight, leftTreeWidth, headerHeight, headerBorder);
+                    }
+
+                    float btnWidth = 24f;
+                    float btnHeight = 20f;
+                    sourceFileEllipsisRect = new SKRect(
+                        leftTreeWidth - btnWidth - 6f,
+                        (headerHeight - btnHeight) / 2f,
+                        leftTreeWidth - 6f,
+                        (headerHeight + btnHeight) / 2f
+                    );
+
+                    using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
+                    using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
+                    using (var btnFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
+                    using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+                        canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBg);
+                        canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBorder);
+                        canvas.DrawText("...", sourceFileEllipsisRect.MidX, sourceFileEllipsisRect.MidY + 4f, SKTextAlign.Center, btnFont, btnTextPaint);
+                    }
+
+                    string sourceLabelText = !string.IsNullOrWhiteSpace(MainForm.SourcePath)
+                        ? $"Source: {System.IO.Path.GetFileName(MainForm.SourcePath)}"
+                        : "Source Document";
+
+                    SKRect labelClipRect = new SKRect(0, 0, sourceFileEllipsisRect.Left - 4f, headerHeight);
+                    canvas.Save();
+                    canvas.ClipRect(labelClipRect);
+                    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f))
+                    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+                        canvas.DrawText(sourceLabelText, 12f, 21f, headerFont, headerTextPaint);
+                    }
+                    canvas.Restore();
+
+                    // Draw Source Tree Elements
+                    float currentYLeft = headerHeight + 8f;
+                    if (SourceRoot != null) RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true);
+                    break;
+
+                case PaintArea.MiddlePanel:
+                    // Middle Viewport Background
+                    bgPaint.Color = new SKColor(245, 247, 250);
+                    canvas.DrawRect(centerLeft, 0, centerRight - centerLeft, mainContentHeight, bgPaint);
+
+                    // Draw Placed Canvas Grid Functoids
+                    RenderActiveGridFunctoids(canvas, centerLeft);
+                    break;
+
+                case PaintArea.RightPanel:
+                    // Right Viewport Background
+                    bgPaint.Color = SKColors.GhostWhite;
+                    canvas.DrawRect(centerRight, 0, rightTreeWidth, mainContentHeight, bgPaint);
+
+                    // Right Panel Header
+                    SKRect rightHeaderRect = new SKRect(centerRight, 0, w, headerHeight);
+                    using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+                        canvas.DrawRect(rightHeaderRect, headerBg);
+                    }
+                    using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
+                        canvas.DrawLine(centerRight, headerHeight, w, headerHeight, headerBorder);
+                    }
+                    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
+                    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+                        canvas.DrawText("Destination Document", centerRight + 12f, 21f, headerFont, headerTextPaint);
+                    }
+
+                    // Draw Destination Tree Elements
+                    float currentYRight = headerHeight + 8f;
+                    if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
+                    break;
+
+                case PaintArea.LogPanel:
+                    // Log Panel Background
+                    bgPaint.Color = new SKColor(30, 30, 30);
+                    canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
+                    break;
+            }
+        }
+
+        // 2. Draw Floating Tool Palette Window
+        RenderFunctoidToolPalette(canvas);
+
+        // 3. Draw Layout Grid Splitters
+        bgPaint.Color = SKColors.DarkGray;
+        canvas.DrawRect(leftTreeWidth - 2, 0, SplitterWidth, mainContentHeight, bgPaint);
+        canvas.DrawRect(centerRight - 3, 0, SplitterWidth, mainContentHeight, bgPaint);
+        canvas.DrawRect(0, mainContentHeight - 2, w, SplitterWidth, bgPaint);
+
+        // 4. Draw Permanent Map Wire Connections
+        RenderMapConnections(canvas);
+
+        // 5. Draw Live Dragging Connection Line Link
+        if (dragSource != null) {
+            using var dragPaint = new SKPaint { Color = SKColors.Orange, StrokeWidth = 2f, IsAntialias = true, Style = SKPaintStyle.Stroke };
+            using var previewPath = new SKPath();
+
+            SKPoint portStartPoint = GetSourceEndpointLocation(dragSource);
+            if (portStartPoint.IsEmpty) {
+                portStartPoint = new SKPoint((float)currentDragPoint.X, (float)currentDragPoint.Y);
+            }
+            previewPath.MoveTo(portStartPoint.X, portStartPoint.Y);
+
+            SKPoint targetPoint = new SKPoint(lastMousePos.X, lastMousePos.Y);
+
+            if (dragSource.Type != ConnectionEndpointType.DestinationNode) {
+                foreach (var instance in ActiveFunctoids) {
+                    float absFunctoidX = centerLeft + instance.X;
+                    SKRect hitBox = new SKRect(absFunctoidX, instance.Y, absFunctoidX + instance.Width, instance.Y + instance.Height);
+
+                    if (hitBox.Contains(lastMousePos.X, lastMousePos.Y) && lastMousePos.X <= hitBox.MidX) {
+                        int maxParams = GetFunctoidInputCount(instance);
+                        float relativeY = lastMousePos.Y - instance.Y;
+                        float sectorHeight = instance.Height / (maxParams > 0 ? maxParams : 1);
+                        int hoveredSlotIndex = (int)(relativeY / sectorHeight);
+
+                        if (hoveredSlotIndex < 0) hoveredSlotIndex = 0;
+                        if (hoveredSlotIndex >= maxParams) hoveredSlotIndex = maxParams - 1;
+
+                        targetPoint = new SKPoint(absFunctoidX, GetFunctoidInputSlotY(instance, hoveredSlotIndex));
+                        break;
+                    }
+                }
+            }
+
+            float controlOffset = Math.Max(30f, Math.Abs(targetPoint.X - portStartPoint.X) * 0.5f);
+            float cp1X = portStartPoint.X + controlOffset;
+            float cp1Y = portStartPoint.Y;
+            float cp2X = targetPoint.X - controlOffset;
+            float cp2Y = targetPoint.Y;
+
+            previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, targetPoint.X, targetPoint.Y);
+            canvas.DrawPath(previewPath, dragPaint);
+        }
+
+        // 6. Draw Ghost Palette Item Preview Box
+        if (draggingPaletteFunctoid != null) {
+            using var gFont = new SKFont(SKTypeface.Default);
+            using var ghostBoxPaint = new SKPaint { Color = new SKColor(52, 152, 219, 160), Style = SKPaintStyle.Fill, IsAntialias = true };
+            using var ghostBorderPaint = new SKPaint { Color = new SKColor(41, 128, 185), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
+            using var ghostTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true };
+
+            float ghostX = lastMousePos.X - paletteItemDragOffset.X;
+            float ghostY = lastMousePos.Y - paletteItemDragOffset.Y;
+            SKRect ghostRect = new SKRect(ghostX, ghostY, ghostX + 110f, ghostY + 36f);
+
+            canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBoxPaint);
+            canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBorderPaint);
+            canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, SKTextAlign.Center, gFont, ghostTextPaint);
+        }
+    }
+    // ========================================================================
 
     #region RenderFunctoidParameterConnections
     private void RenderFunctoidParameterConnections(SKCanvas canvas, float centerLeft) {
