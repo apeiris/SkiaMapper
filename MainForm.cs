@@ -12,7 +12,7 @@ namespace SkiaMapper {
 
         // Static Path Accessors
         public static string SourcePath { get;  set; } = string.Empty;
-        public static string DestinationPath { get; private set; } = string.Empty;
+        public static string DestinationPath { get;  set; } = string.Empty;
         public static string XsltPath { get; set; } = string.Empty;
 
         // Repository Fields

@@ -64,6 +64,7 @@ public class SkiaMapperControl : SKControl {
     private float maxToolboxContentHeight = 0f;
     // Hit-test boundary for the Source File Ellipsis Picker Button
     private SKRect sourceFileEllipsisRect;
+    private SKRect destinationFileEllipsisRect;
 #pragma warning disable CS0414
     private bool isDraggingToolboxScrollbar = false;
 #pragma warning restore CS0414
@@ -764,12 +765,36 @@ public class SkiaMapperControl : SKControl {
                     RenderActiveGridFunctoids(canvas, centerLeft);
                     break;
 
+                //case PaintArea.RightPanel:
+                //    // Right Viewport Background
+                //    bgPaint.Color = SKColors.GhostWhite;
+                //    canvas.DrawRect(centerRight, 0, rightTreeWidth, mainContentHeight, bgPaint);
+
+                //    // Right Panel Header
+                //    SKRect rightHeaderRect = new SKRect(centerRight, 0, w, headerHeight);
+                //    using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+                //        canvas.DrawRect(rightHeaderRect, headerBg);
+                //    }
+                //    using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
+                //        canvas.DrawLine(centerRight, headerHeight, w, headerHeight, headerBorder);
+                //    }
+                //    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
+                //    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+                //        canvas.DrawText("Destination Document", centerRight + 12f, 21f, headerFont, headerTextPaint);
+                //    }
+
+                //    // Draw Destination Tree Elements
+                //    float currentYRight = headerHeight + 8f;
+                //    if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
+                //    break;
+
+
                 case PaintArea.RightPanel:
                     // Right Viewport Background
                     bgPaint.Color = SKColors.GhostWhite;
                     canvas.DrawRect(centerRight, 0, rightTreeWidth, mainContentHeight, bgPaint);
 
-                    // Right Panel Header
+                    // Right Panel Header & Ellipsis Picker
                     SKRect rightHeaderRect = new SKRect(centerRight, 0, w, headerHeight);
                     using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
                         canvas.DrawRect(rightHeaderRect, headerBg);
@@ -777,10 +802,40 @@ public class SkiaMapperControl : SKControl {
                     using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
                         canvas.DrawLine(centerRight, headerHeight, w, headerHeight, headerBorder);
                     }
-                    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
-                    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
-                        canvas.DrawText("Destination Document", centerRight + 12f, 21f, headerFont, headerTextPaint);
+
+                    // Define and draw the Destination Ellipsis (...) Button on the far right of the header
+                    float destBtnWidth = 24f;
+                    float destBtnHeight = 20f;
+                    destinationFileEllipsisRect = new SKRect(
+                        w - destBtnWidth - 6f,
+                        (headerHeight - destBtnHeight) / 2f,
+                        w - 6f,
+                        (headerHeight + destBtnHeight) / 2f
+                    );
+
+                    using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
+                    using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
+                    using (var btnFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
+                    using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+                        canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBg);
+                        canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBorder);
+                        canvas.DrawText("...", destinationFileEllipsisRect.MidX, destinationFileEllipsisRect.MidY + 4f, SKTextAlign.Center, btnFont, btnTextPaint);
                     }
+
+                    // Format and clip the label text so it doesn't overlap the ellipsis button
+                    string destLabelText = !string.IsNullOrWhiteSpace(MainForm.DestinationPath)
+                        ? $"Destination: {System.IO.Path.GetFileName(MainForm.DestinationPath)}"
+                        : "Destination Document";
+
+                    SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileEllipsisRect.Left - 4f, headerHeight);
+                    canvas.Save();
+                    canvas.ClipRect(destLabelClipRect);
+
+                    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f))
+                    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+                        canvas.DrawText(destLabelText, centerRight + 12f, 21f, headerFont, headerTextPaint);
+                    }
+                    canvas.Restore();
 
                     // Draw Destination Tree Elements
                     float currentYRight = headerHeight + 8f;
@@ -1593,7 +1648,7 @@ public class SkiaMapperControl : SKControl {
     protected override void OnMouseDown(MouseEventArgs e) {
         lastMousePos = new PointF(e.X, e.Y);
         this.Focus(); // Retain instant canvas keyboard capture
-        // Calculate structural metrics used across layout zones
+                      // Calculate structural metrics used across layout zones
         float mainContentHeight = Height - logPanelHeight;
         float centerLeft = leftTreeWidth;
         float centerRight = Width - rightTreeWidth;
@@ -1638,9 +1693,43 @@ public class SkiaMapperControl : SKControl {
                     return;
                 }
 
-                    // 1. Priority Intercept: Tool Palette Floating Overlay Window
-                    if (paletteBounds.Contains(e.X, e.Y)) {
-                    ProcessLeftClickToolPalette(e);
+                // Priority Intercept: Destination File Ellipsis Picker Button (...)
+                if (destinationFileEllipsisRect.Contains(e.X, e.Y)) {
+                    using var ofd = new OpenFileDialog {
+                        Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
+                        Title = "Select Destination Target XML Schema"
+                    };
+
+                    if (ofd.ShowDialog() == DialogResult.OK) {
+                        MainForm.DestinationPath = ofd.FileName;
+
+                        // 1. Clear active canvas and connection state
+                        ActiveFunctoids.Clear();
+                        Connections.Clear();
+                        dragSource = null;
+                        draggingCanvasInstance = null;
+                        selectedCanvasInstance = null;
+                        selectedConnection = null;
+                        contextTargetInstance = null;
+                        contextTargetConnection = null;
+
+                        // 2. Reload and reparse the destination schema tree using MainForm's parser
+                        try {
+                            this.DestinationRoot = MainForm.LoadSchemaFromFile(ofd.FileName);
+                        } catch (Exception ex) {
+                            MessageBox.Show(
+                                $"Failed to load destination schema tree:\n{ex.Message}",
+                                "Schema Load Error",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Error
+                            );
+                            this.DestinationRoot = null;
+                        }
+
+                        // 3. Reset workspace state flags and repaint
+                        isCanvasDirty = false;
+                        Invalidate(); // Repaint canvas header and right tree panel
+                    }
                     return;
                 }
 
@@ -1683,6 +1772,7 @@ public class SkiaMapperControl : SKControl {
                 break;
         }
     }
+
     protected override void OnKeyDown(KeyEventArgs e) {
         base.OnKeyDown(e);
 
