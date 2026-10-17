@@ -16,6 +16,7 @@ using static System.Net.WebRequestMethods;
 namespace SkiaMapper.Controls;
 
 public class SkiaMapperControl : SKControl {
+    #region Fields and Properties
     public enum PaintArea {
         LeftPanel,
         MiddlePanel,
@@ -91,6 +92,13 @@ public class SkiaMapperControl : SKControl {
     private readonly Dictionary<string, float> _sourceNodeYCache = [];
     private readonly Dictionary<string, float> _destinationNodeYCache = [];
 
+
+    // Define these at the class level to avoid recreating them every frame
+    private readonly SKFont _headerButtonFont = new(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f);
+    private readonly SKFont _headerTitleFont = new(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f);
+    private readonly SKFont _ghostFont = new(SKTypeface.Default, 12f);
+
+    #endregion Properties and Fields
 
     public SkiaMapperControl() {
         this.DoubleBuffered = true;
@@ -497,7 +505,8 @@ public class SkiaMapperControl : SKControl {
         }
     }
     #endregion RenderTreeElement 523
-  
+
+
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
         if (DesignMode || LicenseManager.UsageMode == LicenseUsageMode.Designtime) {
             // Render simple placeholder text or skip Skia render initialization
@@ -507,6 +516,7 @@ public class SkiaMapperControl : SKControl {
         base.OnPaintSurface(e);
         _sourceNodeYCache.Clear();
         _destinationNodeYCache.Clear();
+
         var canvas = e.Surface.Canvas;
         int w = e.Info.Width;
         int h = e.Info.Height;
@@ -519,128 +529,105 @@ public class SkiaMapperControl : SKControl {
 
         using var bgPaint = new SKPaint();
 
-        // 1. Render core viewport panels and headers using a switch statement
-        foreach (PaintArea area in Enum.GetValues<PaintArea>()) {
-            switch (area) {
-                case PaintArea.LeftPanel:
-                    // Left Viewport Background
-                    bgPaint.Color = SKColors.GhostWhite;
-                    canvas.DrawRect(0, 0, leftTreeWidth, mainContentHeight, bgPaint);
-                    // Left Panel Header & Ellipsis Picker
-                    SKRect leftHeaderRect = new SKRect(0, 0, leftTreeWidth, headerHeight);
-                    using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
-                        canvas.DrawRect(leftHeaderRect, headerBg);
-                    }
-                    using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
-                        canvas.DrawLine(0, headerHeight, leftTreeWidth, headerHeight, headerBorder);
-                    }
+        // 1. Render core viewport panels and headers explicitly in order
+        // --- Left Panel ---
+        bgPaint.Color = SKColors.GhostWhite;
+        canvas.DrawRect(0, 0, leftTreeWidth, mainContentHeight, bgPaint);
 
-                    float btnWidth = 24f;
-                    float btnHeight = 20f;
-                    sourceFileEllipsisRect = new SKRect(
-                        leftTreeWidth - btnWidth - 6f,
-                        (headerHeight - btnHeight) / 2f,
-                        leftTreeWidth - 6f,
-                        (headerHeight + btnHeight) / 2f
-                    );
-
-                    using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
-                    using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
-                    using (var btnFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
-                    using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
-                        canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBg);
-                        canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBorder);
-                        canvas.DrawText("...", sourceFileEllipsisRect.MidX, sourceFileEllipsisRect.MidY + 4f, SKTextAlign.Center, btnFont, btnTextPaint);
-                    }
-
-                    string sourceLabelText = !string.IsNullOrWhiteSpace(MainForm.SourcePath)
-                        ? $"Source: {System.IO.Path.GetFileName(MainForm.SourcePath)}"
-                        : "Source Document";
-
-                    SKRect labelClipRect = new SKRect(0, 0, sourceFileEllipsisRect.Left - 4f, headerHeight);
-                    canvas.Save();
-                    canvas.ClipRect(labelClipRect);
-                    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f))
-                    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
-                        canvas.DrawText(sourceLabelText, 12f, 21f, headerFont, headerTextPaint);
-                    }
-                    canvas.Restore();
-
-                    // Draw Source Tree Elements
-                    float currentYLeft = headerHeight + 8f;
-                    if (SourceRoot != null) RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true);
-                    break;
-
-                case PaintArea.MiddlePanel:
-                    // Middle Viewport Background
-                    bgPaint.Color = new SKColor(245, 247, 250);
-                    canvas.DrawRect(centerLeft, 0, centerRight - centerLeft, mainContentHeight, bgPaint);
-
-                    // Draw Placed Canvas Grid Functoids
-                    RenderActiveGridFunctoids(canvas, centerLeft);
-                    break;
-
-        
-                case PaintArea.RightPanel:
-                    // Right Viewport Background
-                    bgPaint.Color = SKColors.GhostWhite;
-                    canvas.DrawRect(centerRight, 0, rightTreeWidth, mainContentHeight, bgPaint);
-
-                    // Right Panel Header & Ellipsis Picker
-                    SKRect rightHeaderRect = new SKRect(centerRight, 0, w, headerHeight);
-                    using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
-                        canvas.DrawRect(rightHeaderRect, headerBg);
-                    }
-                    using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
-                        canvas.DrawLine(centerRight, headerHeight, w, headerHeight, headerBorder);
-                    }
-
-                    // Define and draw the Destination Ellipsis (...) Button on the far right of the header
-                    float destBtnWidth = 24f;
-                    float destBtnHeight = 20f;
-                    destinationFileEllipsisRect = new SKRect(
-                        w - destBtnWidth - 6f,
-                        (headerHeight - destBtnHeight) / 2f,
-                        w - 6f,
-                        (headerHeight + destBtnHeight) / 2f
-                    );
-
-                    using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
-                    using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
-                    using (var btnFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
-                    using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
-                        canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBg);
-                        canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBorder);
-                        canvas.DrawText("...", destinationFileEllipsisRect.MidX, destinationFileEllipsisRect.MidY + 4f, SKTextAlign.Center, btnFont, btnTextPaint);
-                    }
-
-                    // Format and clip the label text so it doesn't overlap the ellipsis button
-                    string destLabelText = !string.IsNullOrWhiteSpace(MainForm.DestinationPath)
-                        ? $"Destination: {System.IO.Path.GetFileName(MainForm.DestinationPath)}"
-                        : "Destination Document";
-
-                    SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileEllipsisRect.Left - 4f, headerHeight);
-                    canvas.Save();
-                    canvas.ClipRect(destLabelClipRect);
-
-                    using (var headerFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f))
-                    using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
-                        canvas.DrawText(destLabelText, centerRight + 12f, 21f, headerFont, headerTextPaint);
-                    }
-                    canvas.Restore();
-
-                    // Draw Destination Tree Elements
-                    float currentYRight = headerHeight + 8f;
-                    if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
-                    break;
-
-                case PaintArea.LogPanel:
-                    // Log Panel Background
-                    bgPaint.Color = new SKColor(30, 30, 30);
-                    canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
-                    break;
-            }
+        SKRect leftHeaderRect = new SKRect(0, 0, leftTreeWidth, headerHeight);
+        using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+            canvas.DrawRect(leftHeaderRect, headerBg);
         }
+        using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
+            canvas.DrawLine(0, headerHeight, leftTreeWidth, headerHeight, headerBorder);
+        }
+
+        float btnWidth = 24f;
+        float btnHeight = 20f;
+        sourceFileEllipsisRect = new SKRect(
+            leftTreeWidth - btnWidth - 6f,
+            (headerHeight - btnHeight) / 2f,
+            leftTreeWidth - 6f,
+            (headerHeight + btnHeight) / 2f
+        );
+
+        using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
+        using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
+        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+            canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBorder);
+            canvas.DrawText("...", sourceFileEllipsisRect.MidX, sourceFileEllipsisRect.MidY + 4f, SKTextAlign.Center, _headerButtonFont, btnTextPaint);
+        }
+
+        string sourceLabelText = !string.IsNullOrWhiteSpace(MainForm.SourcePath)
+            ? $"Source: {System.IO.Path.GetFileName(MainForm.SourcePath)}"
+            : "Source Document";
+
+        SKRect labelClipRect = new SKRect(0, 0, sourceFileEllipsisRect.Left - 4f, headerHeight);
+        canvas.Save();
+        canvas.ClipRect(labelClipRect);
+        using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+            canvas.DrawText(sourceLabelText, 12f, 21f, _headerTitleFont, headerTextPaint);
+        }
+        canvas.Restore();
+
+        float currentYLeft = headerHeight + 8f;
+        if (SourceRoot != null) RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true);
+
+
+        // --- Middle Panel ---
+        bgPaint.Color = new SKColor(245, 247, 250);
+        canvas.DrawRect(centerLeft, 0, centerRight - centerLeft, mainContentHeight, bgPaint);
+        RenderActiveGridFunctoids(canvas, centerLeft);
+
+
+        // --- Right Panel ---
+        bgPaint.Color = SKColors.GhostWhite;
+        canvas.DrawRect(centerRight, 0, rightTreeWidth, mainContentHeight, bgPaint);
+
+        SKRect rightHeaderRect = new SKRect(centerRight, 0, w, headerHeight);
+        using (var headerBg = new SKPaint { Color = new SKColor(230, 235, 242), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+            canvas.DrawRect(rightHeaderRect, headerBg);
+        }
+        using (var headerBorder = new SKPaint { Color = new SKColor(180, 190, 205), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true }) {
+            canvas.DrawLine(centerRight, headerHeight, w, headerHeight, headerBorder);
+        }
+
+        destinationFileEllipsisRect = new SKRect(
+            w - btnWidth - 6f,
+            (headerHeight - btnHeight) / 2f,
+            w - 6f,
+            (headerHeight + btnHeight) / 2f
+        );
+
+        using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
+        using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
+        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+            canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBorder);
+            canvas.DrawText("...", destinationFileEllipsisRect.MidX, destinationFileEllipsisRect.MidY + 4f, SKTextAlign.Center, _headerButtonFont, btnTextPaint);
+        }
+
+        string destLabelText = !string.IsNullOrWhiteSpace(MainForm.DestinationPath)
+            ? $"Destination: {System.IO.Path.GetFileName(MainForm.DestinationPath)}"
+            : "Destination Document";
+
+        SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileEllipsisRect.Left - 4f, headerHeight);
+        canvas.Save();
+        canvas.ClipRect(destLabelClipRect);
+        using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
+            canvas.DrawText(destLabelText, centerRight + 12f, 21f, _headerTitleFont, headerTextPaint);
+        }
+        canvas.Restore();
+
+        float currentYRight = headerHeight + 8f;
+        if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
+
+
+        // --- Log Panel ---
+        bgPaint.Color = new SKColor(30, 30, 30);
+        canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
+
 
         // 2. Draw Floating Tool Palette Window
         RenderFunctoidToolPalette(canvas);
@@ -699,7 +686,6 @@ public class SkiaMapperControl : SKControl {
 
         // 6. Draw Ghost Palette Item Preview Box
         if (draggingPaletteFunctoid != null) {
-            using var gFont = new SKFont(SKTypeface.Default);
             using var ghostBoxPaint = new SKPaint { Color = new SKColor(52, 152, 219, 160), Style = SKPaintStyle.Fill, IsAntialias = true };
             using var ghostBorderPaint = new SKPaint { Color = new SKColor(41, 128, 185), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true };
             using var ghostTextPaint = new SKPaint { Color = SKColors.White, IsAntialias = true };
@@ -710,9 +696,11 @@ public class SkiaMapperControl : SKControl {
 
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBoxPaint);
             canvas.DrawRoundRect(ghostRect, 4f, 4f, ghostBorderPaint);
-            canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, SKTextAlign.Center, gFont, ghostTextPaint);
+            canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, SKTextAlign.Center, _ghostFont, ghostTextPaint);
         }
     }
+
+
     // ========================================================================
 
     #region RenderFunctoidParameterConnections
@@ -1729,37 +1717,7 @@ public class SkiaMapperControl : SKControl {
             Cursor = Cursors.Default;
         }
     }
-    private static string BuildDefaultScriptFromBodyTemplate(FunctoidDefinition def, string methodName) {
-        if (string.IsNullOrWhiteSpace(def.ScriptTemplate)) {
-            return $"public object {methodName}(params object[] args) \r\n{{\r\n    return null;\r\n}}";
-        }
-
-        // Check if the script template is already a full method signature definition
-        if (def.ScriptTemplate.Contains("public ") || def.ScriptTemplate.Contains("private ")) {
-            return def.ScriptTemplate;
-        }
-
-        var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"public object {methodName}(object param0, object param1 = null, object param2 = null)");
-        sb.AppendLine("{");
-
-        // Process formatting variables or simple joining symbols safely
-        if (!string.IsNullOrWhiteSpace(def.JoinOperator)) {
-            sb.AppendLine($"    var parts = new[] {{ param0, param1, param2 }}.Where(p => p != null).Select(p => p.ToString());");
-            sb.AppendLine($"    return string.Join(\"{def.JoinOperator}\", parts);");
-        } else {
-            // CRITICAL FIX: Safe token replacement that doesn't blow up if {1} or {2} are missing
-            string processedTemplate = def.ScriptTemplate;
-            processedTemplate = processedTemplate.Replace("{0}", "param0");
-            processedTemplate = processedTemplate.Replace("{1}", "param1");
-            processedTemplate = processedTemplate.Replace("{2}", "param2");
-
-            sb.AppendLine($"    {processedTemplate}");
-        }
-
-        sb.AppendLine("}");
-        return sb.ToString();
-    }
+    
     private static string ExtractMethodNameFromTemplate(string template, string functoidName, int functoidId) {
         if (string.IsNullOrWhiteSpace(template)) {
             // Fallback clean name alpha-numeric format strip
@@ -2063,7 +2021,6 @@ public class SkiaMapperControl : SKControl {
 
     public string SaveConfiguration() {
         var state = new MappingProjectState {
-            // --- REVISED: Extract data as standard Lists for serialization compatibility ---
             ActiveFunctoids = this.ActiveFunctoids.ToList(),
             Connections = this.Connections.ToList()
         };
@@ -2113,7 +2070,5 @@ public class SkiaMapperControl : SKControl {
         }
     }
     #endregion LoadConfiguration 1795
-    #region AssignInputParameter with Slot Index Validation and Loop Prevention
 
-    #endregion   AssignInputParameter 1819
 }
