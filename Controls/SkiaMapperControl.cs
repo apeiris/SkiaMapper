@@ -160,11 +160,13 @@ public class SkiaMapperControl : SKControl {
                 xslt.Transform(xmlReader, args, xmlWriter);
             }
 
-            MessageBox.Show("Transformation completed successfully!", "Success",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            AutoFadeMessageBox.Show(
+                    "XSLT transformation executed successfully!",
+                    "Execution Complete", 5000
+                );
         } catch (Exception ex) {
-            MessageBox.Show($"Execution failed: {ex.Message}", "Transform Error",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+            ErrorHelper.HandleException(ex, "parsing error");
+            AutoFadeMessageBox.Show("Error during xslt transformation, Error copied to clipboard", "failed", 5000);
         }
     }
 
@@ -195,19 +197,19 @@ public class SkiaMapperControl : SKControl {
             transform.Load(openXsltDialog.FileName);
             transform.Transform(openXmlDialog.FileName, saveOutputDialog.FileName);
 
-            MessageBox.Show(
+            AutoFadeMessageBox.Show(
                 "XSLT transformation executed successfully!",
-                "Execution Complete",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information
+                "Execution Complete",2000
             );
         } catch (Exception ex) {
-            MessageBox.Show(
-                $"Failed to execute XSLT transformation:\n{ex.Message}",
-                "Execution Error",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error
-            );
+            //MessageBox.Show(
+            //    $"Failed to execute XSLT transformation:\n{ex.Message}",
+            //    "Execution Error",
+            //    MessageBoxButtons.OK,
+            //    MessageBoxIcon.Error
+            //);
+            ErrorHelper.HandleException(ex, "parsing error");
+            AutoFadeMessageBox.Show("Error during xslt transformation, Error copied to clipboard", "failed", 2000);
         }
     }
 
