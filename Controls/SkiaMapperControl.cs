@@ -112,6 +112,13 @@ public class SkiaMapperControl : SKControl {
         editScriptItem.Click += EditScriptItem_Click;
         functoidContextMenu.Items.Add(editScriptItem);
 
+
+        // --- NEW: Add Duplicate Item to Functoid Context Menu ---
+        var duplicateFunctoidItem = new ToolStripMenuItem("Duplicate Functoid");
+        duplicateFunctoidItem.Click += DuplicateFunctoidItem_Click;
+        functoidContextMenu.Items.Add(duplicateFunctoidItem);
+
+
         // --- ADDITION: Add Delete Item to Functoid Context Menu ---
         var deleteFunctoidItem = new ToolStripMenuItem("Delete Functoid");
         deleteFunctoidItem.Click += DeleteFunctoidItem_Click;
@@ -406,6 +413,30 @@ public class SkiaMapperControl : SKControl {
         }
 
     }
+    private void DuplicateFunctoidItem_Click(object? sender, EventArgs e) {
+        if (contextTargetInstance != null) {
+            // Create a new instance cloned from the target, with a fresh GUID and a pixel offset
+            var duplicatedInstance = new FunctoidInstance {
+                Id = Guid.NewGuid(),
+                X = contextTargetInstance.X + 25f, // Offset horizontally
+                Y = contextTargetInstance.Y + 25f, // Offset vertically
+                Width = contextTargetInstance.Width,
+                Height = contextTargetInstance.Height,
+                Definition = contextTargetInstance.Definition,
+                CustomScriptBody = contextTargetInstance.CustomScriptBody,
+                CustomMethodName = contextTargetInstance.CustomMethodName
+            };
+
+            // Add to active collection, select it, and trigger a repaint
+            ActiveFunctoids.Add(duplicatedInstance);
+            selectedCanvasInstance = duplicatedInstance;
+            contextTargetInstance = null;
+
+            Invalidate();
+        }
+    }
+
+
 
     public int GetFunctoidInputCount(FunctoidInstance instance) {
         if (instance?.Definition == null) return 1;
