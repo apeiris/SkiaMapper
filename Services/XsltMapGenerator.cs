@@ -63,6 +63,7 @@ namespace SkiaMapper.Services {
                 MessageBox.Show($"XSLT generation failed:\n{ex.Message}", "Pipeline Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
         public object BuildDynamicExtensionObject() {
             var codeBuilder = new StringBuilder();
             codeBuilder.AppendLine("using System;");
@@ -70,7 +71,6 @@ namespace SkiaMapper.Services {
             codeBuilder.AppendLine("namespace SkiaMapper.Dynamic {");
             codeBuilder.AppendLine("    public class FunctoidExtension {");
 
-            // Find all active functoids that are actually connected
             var usedFunctoidIds = _connections
                 .Where(c => c.Source != null && c.Source.Type == ConnectionEndpointType.Functoid && c.Source.FunctoidInstanceId.HasValue)
                 .Select(c => c.Source.FunctoidInstanceId.Value)
@@ -78,17 +78,35 @@ namespace SkiaMapper.Services {
                 .ToList();
 
             var activeInstances = _activeFunctoids
-                .Where(f => usedFunctoidIds.Contains(f.Id))
+                .Where(f => usedFunctoidIds.Contains(f.Id) || _connections.Any(c => c.Target?.FunctoidInstanceId == f.Id))
                 .ToList();
 
             var addedSignatures = new HashSet<string>();
 
             foreach (var functoid in activeInstances) {
-                if (string.IsNullOrWhiteSpace(functoid.CustomScriptBody)) continue;
+                int paramCount = _connections
+                    .Where(c => c.Target?.Type == ConnectionEndpointType.Functoid && c.Target.FunctoidInstanceId == functoid.Id)
+                    .Select(c => c.Target.InputIndex)
+                    .DefaultIfEmpty(-1)
+                    .Max() + 1;
 
-                string script = functoid.CustomScriptBody.Trim();
+                if (paramCount <= 0) {
+                    paramCount = functoid.Definition?.InputParametersCount ?? 0;
+                }
 
-                // Avoid adding duplicate method definitions
+                string methodName = !string.IsNullOrEmpty(functoid.CustomMethodName)
+                    ? functoid.CustomMethodName
+                    : (functoid.Definition?.Name?.Replace(" ", "") ?? "Transform");
+
+                string script;
+                if (!string.IsNullOrWhiteSpace(functoid.CustomScriptBody)) {
+                    script = functoid.CustomScriptBody.Trim();
+                } else {
+                    // Generate a clean default method body matching the parameter count
+                    var paramList = string.Join(", ", Enumerable.Range(0, Math.Max(1, paramCount)).Select(i => $"object p{i}"));
+                    script = $"public static string {methodName}({paramList}) {{ return p0?.ToString() ?? \"\"; }}";
+                }
+
                 if (!addedSignatures.Contains(script)) {
                     addedSignatures.Add(script);
                     codeBuilder.AppendLine(script);
@@ -102,7 +120,6 @@ namespace SkiaMapper.Services {
             // Parse C# syntax tree
             SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(codeBuilder.ToString());
 
-            // Add basic assembly references for compilation
             var references = new MetadataReference[]
             {
                 MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
@@ -110,7 +127,6 @@ namespace SkiaMapper.Services {
                 MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location)
             };
 
-            // Compile into an in-memory assembly
             var compilation = CSharpCompilation.Create(
                 $"FunctoidAssembly_{Guid.NewGuid():N}",
                 new[] { syntaxTree },
@@ -128,13 +144,11 @@ namespace SkiaMapper.Services {
                 throw new InvalidOperationException($"Roslyn Functoid Compilation Failed:\n{string.Join("\n", errors)}");
             }
 
-            // Load the compiled assembly and instantiate the class
             ms.Seek(0, SeekOrigin.Begin);
             Assembly assembly = Assembly.Load(ms.ToArray());
             Type type = assembly.GetType("SkiaMapper.Dynamic.FunctoidExtension")!;
             return Activator.CreateInstance(type)!;
         }
-    
         public object BuildDynamicFunctoidExtensionObject() {
             var scriptCode = new StringBuilder();
             scriptCode.AppendLine("using System;");
@@ -261,7 +275,7 @@ namespace SkiaMapper.Services {
                 string joinedArgs = string.Join(", ", argumentExpressions);
                 string methodName = !string.IsNullOrEmpty(targetFunctoid.CustomMethodName)
                     ? targetFunctoid.CustomMethodName
-                    : "Concatenate";
+                    : (targetFunctoid.Definition?.Name?.Replace(" ", "") ?? "Transform");
 
                 return $"user:{methodName}({joinedArgs})";
             }

@@ -1,4 +1,6 @@
-﻿using SkiaSharp;
+﻿using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using SkiaSharp;
 using System;
 using System.Collections.Generic;
 using System.Xml.Serialization;
@@ -59,5 +61,40 @@ public class FunctoidInstance {
                                      CustomScriptBody.Trim() != Definition.ScriptTemplate?.Trim();
 
     [XmlIgnore]
-    public string XslVariableName => $"{CustomMethodName ?? "Transform"}_{Id.ToString("N").Substring(0, 8)}";
+    public string XslVariableName {
+        get {
+            string baseName = null;
+
+            // 1. Try extracting the method name directly from the custom script body via Roslyn
+            if (!string.IsNullOrEmpty(CustomScriptBody)) {
+                try {
+                    var tree = CSharpSyntaxTree.ParseText(CustomScriptBody);
+                    var methodDecl = tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().FirstOrDefault();
+                    if (methodDecl != null) {
+                        baseName = methodDecl.Identifier.Text;
+                    }
+                } catch {
+                    // Fallback gracefully if parsing fails
+                }
+            }
+
+            // 2. Fall back to CustomMethodName if explicitly set
+            if (string.IsNullOrEmpty(baseName) && !string.IsNullOrEmpty(CustomMethodName)) {
+                baseName = CustomMethodName;
+            }
+
+            // 3. Fall back to Definition Name or default "Transform"
+            if (string.IsNullOrEmpty(baseName)) {
+                baseName = Definition?.Name?.Replace(" ", "") ?? "Transform";
+            }
+
+            // Ensure the name is a valid identifier (starts with a letter, alphanumeric only)
+            string sanitized = new string(baseName.Where(char.IsLetterOrDigit).ToArray());
+            if (string.IsNullOrEmpty(sanitized) || !char.IsLetter(sanitized[0])) {
+                sanitized = "Transform" + sanitized;
+            }
+
+            return $"{sanitized}_{Id.ToString("N").Substring(0, 8)}";
+        }
+    }
 }

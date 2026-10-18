@@ -216,6 +216,7 @@ public class SkiaMapperControl : SKControl {
     private void OnCanvasStructureChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) {
         isCanvasDirty = true;
     }
+
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
         if (isPaletteExpanded && paletteBounds.Contains(e.X, e.Y)) {
             float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
@@ -848,9 +849,14 @@ public class SkiaMapperControl : SKControl {
             // 5. Outline the outer shell container rim
             canvas.DrawRoundRect(rect, 4f, 4f, borderPaint);
 
-            // 6. Draw the Functoid identifier description label text
-            // canvas.DrawText(instance.Definition?.Name ?? "Functoid", rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f, textPaint);
-            canvas.DrawText(instance.Definition?.Name ?? "Functoid", rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f, SKTextAlign.Center, gFont, textPaint);
+            // 6. Draw the Functoid identifier description label text (derived from script body / CustomMethodName)
+            string displayName = !string.IsNullOrEmpty(instance.CustomMethodName)
+                ? instance.CustomMethodName
+                : ExtractMethodNameFromTemplate(instance.CustomScriptBody, instance.Definition?.Name ?? "Functoid", 0);
+
+            canvas.DrawText(displayName, rect.MidX + (accentBarWidth / 2f), rect.MidY + 4f, SKTextAlign.Center, gFont, textPaint);
+
+
 
             // --- NEW: SCRIPT MODIFICATION TRACKER ---
             // 7. If the script template differs from baseline, draw a badge in the top-right corner
@@ -1760,6 +1766,12 @@ public class SkiaMapperControl : SKControl {
 
             if (instance.Definition != null) {
                 instance.Definition.InputParametersCount = parsedSlotsCount;
+            }
+
+            // --- NEW: Derive and update the method name from the script body ---
+            string extractedName = ExtractMethodNameFromTemplate(updatedCode, instance.Definition?.Name ?? "Functoid", 0);
+            if (!string.IsNullOrWhiteSpace(extractedName)) {
+                instance.CustomMethodName = extractedName;
             }
         }
 

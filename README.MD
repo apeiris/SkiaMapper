@@ -59,7 +59,36 @@ flowchart TD
     style K fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:#fff
     style X fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:#fff
 ```
+
+
+## Modifying Functoid Scripts & Custom Code
+Users can override and customize the default template behavior of any functoid directly on the workspace canvas using the integrated scripting engine.
+
+### Custom Script Configuration & Workflow
+
+**Script Editor Dialog:** Right-clicking any active functoid instance on the canvas and selecting **"Configure Script Block..."** opens the modal script editor, allowing developers to write custom C# logic.
+
+**Method Name Derivation:** The engine uses **Roslyn AST parsing** (CSharpSyntaxTree and MethodDeclarationSyntax) to automatically extract the custom method identifier directly from the user's script body. 
+If a custom script is modified, the functoid's XSLT variable and method binding names update dynamically to match.   
+
+**Visual Modification Indicator:**
+When a functoid's script body differs from its default baseline template (IsScriptCustomized), a crimson indicator badge appears automatically in the top-right corner of the canvas block.Dynamic Parameter & Slot Synchronization: Altering a script re-analyzers input signature counts on-the-fly, automatically pruning obsolete connection wires that exceed the updated parameter threshold.
+
+
+
 ## Core Engine Components
+
+1.**XsltMapGenerator**
+<br>
+The master compilation block that converts graph nodes and wire configurations into standard-compliant XSLT files. It coordinates the data lifecycle through two explicit execution layers:
+
+* **Roslyn AST Signature Stripping:** Scans customized FunctoidInstance scripts using C# syntax nodes. It isolates parameter defaults, standardizes signature formats, and maps runtime variables to prevent naming collisions.
+* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins.
+
+**2.ScriptCompilationEngine**<br>
+An analytical isolation wrapper designed to instantly validate code blocks or evaluate script expressions on-the-fly without requiring full file compilation cycles. 
+Emits byte arrays directly inside application memory using reflection vectors to handle execution targets safely.   
+
 
 ## 🧩 Built-In Functoids Catalog template (`BuiltInFunctoids.xml`)
 
