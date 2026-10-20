@@ -1,4 +1,6 @@
-﻿using SkiaMapper.Forms;
+﻿using OopFactory.X12.Parsing;
+using OopFactory.X12.Parsing.Model;
+using SkiaMapper.Forms;
 using SkiaMapper.Models;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
@@ -216,7 +218,7 @@ public class SkiaMapperControl : SKControl {
 
             AutoFadeMessageBox.Show(
                 "XSLT transformation executed successfully!",
-                "Execution Complete",2000
+                "Execution Complete", 2000
             );
         } catch (Exception ex) {
             //MessageBox.Show(
@@ -807,7 +809,7 @@ public class SkiaMapperControl : SKControl {
             float cp2X = targetPoint.X - controlOffset;
             float cp2Y = targetPoint.Y;
 
-           // 2026 - 10 - 20
+            // 2026 - 10 - 20
             previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, targetPoint.X, targetPoint.Y);
             canvas.DrawPath(previewPath, dragPaint);
         }
@@ -1691,9 +1693,11 @@ public class SkiaMapperControl : SKControl {
 
                 if (sourceFileEllipsisRect.Contains(e.X, e.Y)) {
                     using var ofd = new OpenFileDialog {
-                        Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
-                        Title = "Select Source Input XML Document"
+                        Filter = "Any extension |*.*",
+                        Title = "None Xml extensions causes conversion to Xml schema"
                     };
+
+                  
 
                     if (ofd.ShowDialog() == DialogResult.OK) {
                         MainForm.SourcePath = ofd.FileName;
@@ -1707,6 +1711,19 @@ public class SkiaMapperControl : SKControl {
                         selectedConnection = null;
                         contextTargetInstance = null;
                         contextTargetConnection = null;
+
+
+                        if (Path.GetExtension(ofd.FileName).ToLower() != ".xml") {
+                            // attempt to parse to xml 
+                            X12Parser parser = new X12Parser();
+                            Stream reader = new FileStream(ofd.FileName, FileMode.Open, FileAccess.Read);
+                            List<Interchange> interchanges = parser.ParseMultiple(reader);
+                            string xml = interchanges.First().Serialize();
+                            ofd.FileName = Path.ChangeExtension(ofd.FileName, ".xml");
+
+                            System.IO.File.WriteAllText(ofd.FileName, xml);
+                            MainForm.SourcePath = ofd.FileName;
+                        }
 
                         // 2. Reload and reparse the source schema tree using MainForm's parser
                         try {
@@ -1926,7 +1943,7 @@ public class SkiaMapperControl : SKControl {
             Cursor = Cursors.Default;
         }
     }
-    
+
     private static string ExtractMethodNameFromTemplate(string template, string functoidName, int functoidId) {
         if (string.IsNullOrWhiteSpace(template)) {
             // Fallback clean name alpha-numeric format strip
