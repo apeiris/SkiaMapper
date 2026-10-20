@@ -178,13 +178,33 @@ namespace SkiaMapper.Services {
             var type = assembly.GetType("SkiaMapper.Dynamic.FunctoidExtension")!;
             return Activator.CreateInstance(type)!;
         }
-       
+
         private string CompileXsltPayload() {
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
             sb.AppendLine("<xsl:stylesheet version=\"1.0\" ");
             sb.AppendLine("                xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"");
             sb.AppendLine("                xmlns:user=\"urn:my-scripts\"");
+
+            // --- DYNAMICALLY DETECT AND REGISTER NAMESPACE PREFIXES ---
+            var discoveredPrefixes = new HashSet<string>();
+            foreach (var conn in _connections) {
+                if (conn.Source?.NodePath != null && conn.Source.NodePath.Contains(':')) {
+                    string prefix = conn.Source.NodePath.Split(':')[0];
+                    discoveredPrefixes.Add(prefix);
+                }
+                if (conn.Target?.NodePath != null && conn.Target.NodePath.Contains(':')) {
+                    string prefix = conn.Target.NodePath.Split(':')[0];
+                    discoveredPrefixes.Add(prefix);
+                }
+            }
+
+            foreach (var prefix in discoveredPrefixes) {
+                // Map the prefix to a generic or default schema namespace URI 
+                // (or adapt this if your SchemaNode model stores actual namespace URIs)
+                sb.AppendLine($"                xmlns:{prefix}=\"http://tempuri.org/{prefix}\"");
+            }
+
             sb.AppendLine("                exclude-result-prefixes=\"user\">");
             sb.AppendLine("  <xsl:output method=\"xml\" indent=\"yes\" encoding=\"utf-8\"/>");
             sb.AppendLine();

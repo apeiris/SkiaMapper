@@ -23,6 +23,16 @@ public class SkiaMapperControl : SKControl {
         RightPanel,
         LogPanel
     }
+
+    // Source and Destination Tree Virtual Scroll State
+    private float sourceVirtualScrollY = 0f;
+    private float maxSourceContentHeight = 0f;
+    private bool isDraggingSourceScrollbar = false;
+
+    private float destinationVirtualScrollY = 0f;
+    private float maxDestinationContentHeight = 0f;
+    private bool isDraggingDestinationScrollbar = false;
+
     // Panel Dimension Metrics (Splitters)
     private float leftTreeWidth = 280f;
     private float rightTreeWidth = 280f;
@@ -224,7 +234,11 @@ public class SkiaMapperControl : SKControl {
         isCanvasDirty = true;
     }
 
+
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
+        float mainContentHeight = Height - logPanelHeight;
+
+        // 1. Toolbox Scroll
         if (isPaletteExpanded && paletteBounds.Contains(e.X, e.Y)) {
             float viewableHeight = paletteBounds.Height - PaletteHeaderHeight - 12f;
             maxToolboxContentHeight = CalculateTotalToolboxContentHeight();
@@ -235,17 +249,52 @@ public class SkiaMapperControl : SKControl {
                 return;
             }
 
-            // Adjust scroll tracking offset (inverted standard wheel direction delta)
             int scrollDelta = e.Delta > 0 ? 30 : -30;
             toolboxVirtualScrollY += scrollDelta;
-
-            // Secure bounds clamp
             float minScrollY = -(maxToolboxContentHeight - viewableHeight);
             toolboxVirtualScrollY = Math.Clamp(toolboxVirtualScrollY, minScrollY, 0f);
 
-            Invalidate(); // Force repaint
+            Invalidate();
+            return;
+        }
+
+        // 2. Source Tree Panel Scroll
+        if (e.X < leftTreeWidth && e.Y < mainContentHeight && e.Y > 32f) {
+            float viewableHeight = mainContentHeight - 32f;
+            if (maxSourceContentHeight <= viewableHeight) {
+                sourceVirtualScrollY = 0f;
+                Invalidate();
+                return;
+            }
+
+            int scrollDelta = e.Delta > 0 ? 30 : -30;
+            sourceVirtualScrollY += scrollDelta;
+            float minScrollY = -(maxSourceContentHeight - viewableHeight);
+            sourceVirtualScrollY = Math.Clamp(sourceVirtualScrollY, minScrollY, 0f);
+
+            Invalidate();
+            return;
+        }
+
+        // 3. Destination Tree Panel Scroll
+        if (e.X > (Width - rightTreeWidth) && e.Y < mainContentHeight && e.Y > 32f) {
+            float viewableHeight = mainContentHeight - 32f;
+            if (maxDestinationContentHeight <= viewableHeight) {
+                destinationVirtualScrollY = 0f;
+                Invalidate();
+                return;
+            }
+
+            int scrollDelta = e.Delta > 0 ? 30 : -30;
+            destinationVirtualScrollY += scrollDelta;
+            float minScrollY = -(maxDestinationContentHeight - viewableHeight);
+            destinationVirtualScrollY = Math.Clamp(destinationVirtualScrollY, minScrollY, 0f);
+
+            Invalidate();
+            return;
         }
     }
+
     private float CalculateTotalToolboxContentHeight() {
         float itemHeight = 24f;
         float categoryHeaderHeight = 22f;
@@ -478,7 +527,7 @@ public class SkiaMapperControl : SKControl {
     #region Paint and Render methods
 
     #region RenderTreeElement
-    private void RenderTreeElement(SKCanvas canvas, SchemaNode node, float currentX, ref float currentY, bool isSourceTree, int currentDepth = 0) {
+    private float RenderTreeElement(SKCanvas canvas, SchemaNode node, float currentX, ref float currentY, bool isSourceTree, int currentDepth = 0) {
         using var font = new SKFont(SKTypeface.Default, 12f);
         using var textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
         using var nodeBoxPaint = new SKPaint { Color = new SKColor(220, 230, 242), Style = SKPaintStyle.Fill };
@@ -486,16 +535,12 @@ public class SkiaMapperControl : SKControl {
 
         float nodeHeight = 22f;
         float indentSpacing = 15f;
-        float panelWidth = isSourceTree ? leftTreeWidth : rightTreeWidth;
+        float totalBranchHeight = nodeHeight + 4f;
 
-        // Calculate the precise visual center Y coordinate of this specific row item
         float visualCenterY = currentY + (nodeHeight / 2f);
         node.LastRenderedY = visualCenterY;
         node.LastRenderedHeight = nodeHeight;
 
-        // --- FIX 1: CACHE REGISTRATION BY UNIQUE IDENTIFIER ---
-        // If you haven't implemented a unique absolute path property yet, use node.Name for now,
-        // but a unique structural path string prevents name collision bugs on different nodes.
         string cacheKey = node.Name;
         if (isSourceTree) {
             _sourceNodeYCache[cacheKey] = visualCenterY;
@@ -503,42 +548,32 @@ public class SkiaMapperControl : SKControl {
             _destinationNodeYCache[cacheKey] = visualCenterY;
         }
 
-        // --- FIX 2: CONSTRAIN THE ROW BOUNDS TO THE SPLITTER ---
-        // Instead of using 'currentX + panelWidth', anchor the left edge to the panel origin (0 for source, panel boundary for dest)
-        // and explicitly define the width boundary regardless of indentation depths.
         float absoluteLeft = isSourceTree ? 4f : (Width - rightTreeWidth) + 4f;
         float absoluteRight = isSourceTree ? (leftTreeWidth - 12f) : (Width - 4f);
 
         SKRect rowRect = new SKRect(absoluteLeft, currentY, absoluteRight, currentY + nodeHeight);
 
-        // Save canvas state and apply a clipping mask to perfectly guard against long name overflows
         canvas.Save();
         canvas.ClipRect(rowRect);
-
-        // Draw row container background and borders
         canvas.DrawRoundRect(rowRect, 2f, 2f, nodeBoxPaint);
         canvas.DrawRoundRect(rowRect, 2f, 2f, nodeBorderPaint);
 
-        // --- FIX 3: INDENT ONLY THE TEXT AND EXPAND GLYPH ---
         string expandGlyph = node.Children.Count > 0 ? (node.IsExpanded ? "▼ " : "► ") : "  ";
         float textStartX = absoluteLeft + 6f + (currentDepth * indentSpacing);
-
         canvas.DrawText($"{expandGlyph}{node.Name}", textStartX, currentY + 16f, font, textPaint);
-
-        // Restore the canvas to release the clipping mask boundary
         canvas.Restore();
 
         currentY += nodeHeight + 4f;
 
-        // --- FIX 4: RECURSIONS INCREMENT DEPTH INSTEAD OF SHIFTING BOX X BOUNDS ---
         if (node.IsExpanded) {
             foreach (var child in node.Children) {
-                // Keep currentX stable to avoid multiplying row bounds rightward
-                RenderTreeElement(canvas, child, currentX, ref currentY, isSourceTree, currentDepth + 1);
+                totalBranchHeight += RenderTreeElement(canvas, child, currentX, ref currentY, isSourceTree, currentDepth + 1);
             }
         }
+        return totalBranchHeight;
     }
-    #endregion RenderTreeElement 523
+    #endregion RenderTreeElement 551,536
+
 
 
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
@@ -605,8 +640,37 @@ public class SkiaMapperControl : SKControl {
         }
         canvas.Restore();
 
-        float currentYLeft = headerHeight + 8f;
-        if (SourceRoot != null) RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true);
+        // Render Source Tree with Clipping and Virtual Scroll
+        SKRect sourceClipArea = new SKRect(0, headerHeight, leftTreeWidth, mainContentHeight);
+        canvas.Save();
+        canvas.ClipRect(sourceClipArea);
+
+        float currentYLeft = headerHeight + 8f + sourceVirtualScrollY;
+        if (SourceRoot != null) {
+            maxSourceContentHeight = RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true);
+        }
+        canvas.Restore();
+
+        // Draw Source Scrollbar if content overflows
+        float sourceViewableHeight = mainContentHeight - headerHeight;
+        if (maxSourceContentHeight > sourceViewableHeight) {
+            float scrollbarWidth = 5f;
+            float trackLeft = leftTreeWidth - scrollbarWidth - 4f;
+            float trackTop = headerHeight + 4f;
+            float trackHeight = sourceViewableHeight - 8f;
+
+            float viewRatio = trackHeight / maxSourceContentHeight;
+            float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
+            float scrollMaxVirtual = maxSourceContentHeight - trackHeight;
+            float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-sourceVirtualScrollY / scrollMaxVirtual);
+            float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
+
+            using var trackPaint = new SKPaint { Color = new SKColor(220, 225, 235, 120), Style = SKPaintStyle.Fill, IsAntialias = true };
+            canvas.DrawRoundRect(new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight), 2.5f, 2.5f, trackPaint);
+
+            using var thumbPaint = new SKPaint { Color = new SKColor(150, 165, 180, 200), Style = SKPaintStyle.Fill, IsAntialias = true };
+            canvas.DrawRoundRect(new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight), 2.5f, 2.5f, thumbPaint);
+        }
 
 
         // --- Middle Panel ---
@@ -654,8 +718,37 @@ public class SkiaMapperControl : SKControl {
         }
         canvas.Restore();
 
-        float currentYRight = headerHeight + 8f;
-        if (DestinationRoot != null) RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
+        // Render Destination Tree with Clipping and Virtual Scroll
+        SKRect destClipArea = new SKRect(centerRight, headerHeight, w, mainContentHeight);
+        canvas.Save();
+        canvas.ClipRect(destClipArea);
+
+        float currentYRight = headerHeight + 8f + destinationVirtualScrollY;
+        if (DestinationRoot != null) {
+            maxDestinationContentHeight = RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
+        }
+        canvas.Restore();
+
+        // Draw Destination Scrollbar if content overflows
+        float destViewableHeight = mainContentHeight - headerHeight;
+        if (maxDestinationContentHeight > destViewableHeight) {
+            float scrollbarWidth = 5f;
+            float trackLeft = w - scrollbarWidth - 4f;
+            float trackTop = headerHeight + 4f;
+            float trackHeight = destViewableHeight - 8f;
+
+            float viewRatio = trackHeight / maxDestinationContentHeight;
+            float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
+            float scrollMaxVirtual = maxDestinationContentHeight - trackHeight;
+            float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-destinationVirtualScrollY / scrollMaxVirtual);
+            float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
+
+            using var trackPaint = new SKPaint { Color = new SKColor(220, 225, 235, 120), Style = SKPaintStyle.Fill, IsAntialias = true };
+            canvas.DrawRoundRect(new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight), 2.5f, 2.5f, trackPaint);
+
+            using var thumbPaint = new SKPaint { Color = new SKColor(150, 165, 180, 200), Style = SKPaintStyle.Fill, IsAntialias = true };
+            canvas.DrawRoundRect(new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight), 2.5f, 2.5f, thumbPaint);
+        }
 
 
         // --- Log Panel ---
@@ -714,6 +807,7 @@ public class SkiaMapperControl : SKControl {
             float cp2X = targetPoint.X - controlOffset;
             float cp2Y = targetPoint.Y;
 
+           // 2026 - 10 - 20
             previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, targetPoint.X, targetPoint.Y);
             canvas.DrawPath(previewPath, dragPaint);
         }
@@ -734,8 +828,7 @@ public class SkiaMapperControl : SKControl {
         }
     }
 
-
-    // ========================================================================
+    // ======771,831==================================================================
 
     #region RenderFunctoidParameterConnections
     private void RenderFunctoidParameterConnections(SKCanvas canvas, float centerLeft) {
@@ -1513,12 +1606,89 @@ public class SkiaMapperControl : SKControl {
     protected override void OnMouseDown(MouseEventArgs e) {
         lastMousePos = new PointF(e.X, e.Y);
         this.Focus(); // Retain instant canvas keyboard capture
-                      // Calculate structural metrics used across layout zones
         float mainContentHeight = Height - logPanelHeight;
+        float headerHeight = 32f;
         float centerLeft = leftTreeWidth;
         float centerRight = Width - rightTreeWidth;
+
         switch (e.Button) {
             case MouseButtons.Left:
+                // --- 1. SOURCE PANEL SCROLLBAR TRACK & THUMB HIT TEST ---
+                if (e.X < leftTreeWidth && e.Y >= headerHeight && e.Y < mainContentHeight) {
+                    float sourceViewableHeight = mainContentHeight - headerHeight;
+                    if (maxSourceContentHeight > sourceViewableHeight) {
+                        float scrollbarWidth = 5f;
+                        float trackLeft = leftTreeWidth - scrollbarWidth - 4f;
+                        float trackTop = headerHeight + 4f;
+                        float trackHeight = sourceViewableHeight - 8f;
+
+                        float viewRatio = trackHeight / maxSourceContentHeight;
+                        float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
+                        float scrollMaxVirtual = maxSourceContentHeight - trackHeight;
+                        float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-sourceVirtualScrollY / scrollMaxVirtual);
+                        float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
+
+                        SKRect trackRect = new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight);
+                        SKRect thumbRect = new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight);
+
+                        if (trackRect.Contains(e.X, e.Y)) {
+                            if (thumbRect.Contains(e.X, e.Y)) {
+                                // Clicked directly on the thumb -> Prepare for dragging
+                                isDraggingSourceScrollbar = true;
+                            } else {
+                                // Clicked on the track -> Jump scroll position toward the click point
+                                float trackScrollableHeight = trackHeight - thumbHeight;
+                                if (trackScrollableHeight > 0) {
+                                    float clickOffsetPercent = Math.Clamp((e.Y - trackTop - (thumbHeight / 2f)) / trackScrollableHeight, 0f, 1f);
+                                    sourceVirtualScrollY = -clickOffsetPercent * scrollMaxVirtual;
+                                }
+                                isDraggingSourceScrollbar = true; // Allow dragging to continue after clicking track
+                            }
+                            Capture = true;
+                            Invalidate();
+                            return;
+                        }
+                    }
+                }
+
+                // --- 2. DESTINATION PANEL SCROLLBAR TRACK & THUMB HIT TEST ---
+                if (e.X > centerRight && e.Y >= headerHeight && e.Y < mainContentHeight) {
+                    float destViewableHeight = mainContentHeight - headerHeight;
+                    if (maxDestinationContentHeight > destViewableHeight) {
+                        float scrollbarWidth = 5f;
+                        float trackLeft = Width - scrollbarWidth - 4f;
+                        float trackTop = headerHeight + 4f;
+                        float trackHeight = destViewableHeight - 8f;
+
+                        float viewRatio = trackHeight / maxDestinationContentHeight;
+                        float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
+                        float scrollMaxVirtual = maxDestinationContentHeight - trackHeight;
+                        float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-destinationVirtualScrollY / scrollMaxVirtual);
+                        float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
+
+                        SKRect trackRect = new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight);
+                        SKRect thumbRect = new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight);
+
+                        if (trackRect.Contains(e.X, e.Y)) {
+                            if (thumbRect.Contains(e.X, e.Y)) {
+                                // Clicked directly on the thumb -> Prepare for dragging
+                                isDraggingDestinationScrollbar = true;
+                            } else {
+                                // Clicked on the track -> Jump scroll position toward the click point
+                                float trackScrollableHeight = trackHeight - thumbHeight;
+                                if (trackScrollableHeight > 0) {
+                                    float clickOffsetPercent = Math.Clamp((e.Y - trackTop - (thumbHeight / 2f)) / trackScrollableHeight, 0f, 1f);
+                                    destinationVirtualScrollY = -clickOffsetPercent * scrollMaxVirtual;
+                                }
+                                isDraggingDestinationScrollbar = true; // Allow dragging to continue after clicking track
+                            }
+                            Capture = true;
+                            Invalidate();
+                            return;
+                        }
+                    }
+                }
+
                 if (sourceFileEllipsisRect.Contains(e.X, e.Y)) {
                     using var ofd = new OpenFileDialog {
                         Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
@@ -1637,7 +1807,7 @@ public class SkiaMapperControl : SKControl {
                 break;
         }
     }
-
+    //============================================1733
     protected override void OnKeyDown(KeyEventArgs e) {
         base.OnKeyDown(e);
 
