@@ -206,8 +206,9 @@ namespace SkiaMapper.Services {
                 string[] segments = path.Split('/');
                 var currentNode = rootNode;
                 foreach (var segment in segments) {
+                    bool isAttr = segment.StartsWith("@");
                     if (!currentNode.Children.TryGetValue(segment, out var child)) {
-                        child = new XsltTreeNode { Name = segment };
+                        child = new XsltTreeNode { Name = segment, IsAttribute = isAttr };
                         currentNode.Children[segment] = child;
                     }
                     currentNode = child;
@@ -228,13 +229,30 @@ namespace SkiaMapper.Services {
 
         private class XsltTreeNode {
             public string Name { get; set; } = "";
+            public bool IsAttribute { get; set; } = false; // <--- Added flag
             public Dictionary<string, XsltTreeNode> Children { get; } = new Dictionary<string, XsltTreeNode>();
             public string? ValueExpression { get; set; }
         }
 
         private void RenderNodeRecursive(XsltTreeNode node, StringBuilder sb, int indentLevel) {
             string indent = new string(' ', indentLevel * 2);
-            if (node.Children.Count == 0) {
+
+            if (node.IsAttribute) {
+                // Strip the '@' character for the attribute name (e.g. "@id" -> "id")
+                string attrName = node.Name.TrimStart('@');
+                sb.AppendLine($"{indent}<xsl:attribute name=\"{attrName}\">");
+                if (!string.IsNullOrEmpty(node.ValueExpression)) {
+                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{node.ValueExpression}\" />");
+                }
+                sb.AppendLine($"{indent}</xsl:attribute>");
+                return;
+            }
+
+            // Separate attributes from element children so attributes render first inside the element tag
+            var attributeChildren = node.Children.Values.Where(c => c.IsAttribute).ToList();
+            var elementChildren = node.Children.Values.Where(c => !c.IsAttribute).ToList();
+
+            if (elementChildren.Count == 0 && attributeChildren.Count == 0) {
                 if (!string.IsNullOrEmpty(node.ValueExpression)) {
                     sb.AppendLine($"{indent}<{node.Name}>");
                     sb.AppendLine($"{indent}  <xsl:value-of select=\"{node.ValueExpression}\" />");
@@ -244,12 +262,22 @@ namespace SkiaMapper.Services {
                 }
             } else {
                 sb.AppendLine($"{indent}<{node.Name}>");
-                foreach (var child in node.Children.Values) {
-                    RenderNodeRecursive(child, sb, indentLevel + 1);
+
+                // Render attributes first
+                foreach (var attrChild in attributeChildren) {
+                    RenderNodeRecursive(attrChild, sb, indentLevel + 1);
                 }
+
+                // Render sub-elements next
+                foreach (var elemChild in elementChildren) {
+                    RenderNodeRecursive(elemChild, sb, indentLevel + 1);
+                }
+
                 sb.AppendLine($"{indent}</{node.Name}>");
             }
         }
+
+
         /// <summary>
         /// Recursively walks the canvas graph topology backward to compile properly formatted 
         /// nested function arguments, accounting for literal parameter fallbacks and missing connection slots.
@@ -317,20 +345,6 @@ namespace SkiaMapper.Services {
             return string.Empty;
         }
 
-        /// <summary>
-        /// Generates a standardized signature string representation of method nodes to guard against block collision duplications.
-        /// </summary>
-        private static string ExtractBasicMethodSignatureKey(string methodCode) {
-            try {
-                SyntaxTree tree = CSharpSyntaxTree.ParseText($"public class DiscoveryShell {{ {methodCode} }}");
-                var method = tree.GetCompilationUnitRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().FirstOrDefault();
-                if (method != null) {
-                    string name = method.Identifier.Text;
-                    string parameterSignature = string.Join(",", method.ParameterList.Parameters.Select(p => p.Type?.ToString()));
-                    return $"{name}({parameterSignature})";
-                }
-            } catch { }
-            return methodCode.Trim();
-        }
+     
     }
 }

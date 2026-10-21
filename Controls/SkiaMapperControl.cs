@@ -1605,18 +1605,6 @@ public class SkiaMapperControl : SKControl {
         return false;
     }
 
-    private void ProcessRightClickWireSelection(MouseEventArgs e) {
-        var rightHitConnection = FindConnectionAtPosition(e.X, e.Y);
-        if (rightHitConnection != null) {
-            contextTargetConnection = rightHitConnection;
-            selectedConnection = rightHitConnection;
-            selectedCanvasInstance = null;
-            Invalidate();
-            connectionContextMenu?.Show(this, e.Location);
-        }
-    }
-
-    #endregion Modularized MouseDown  Intercept Engine Block Helpers
     protected override void OnMouseDown(MouseEventArgs e) {
         lastMousePos = new PointF(e.X, e.Y);
         this.Focus(); // Retain instant canvas keyboard capture
@@ -1626,6 +1614,28 @@ public class SkiaMapperControl : SKControl {
         float centerRight = Width - rightTreeWidth;
         switch (e.Button) {
             case MouseButtons.Left:
+                // --- 0. EXPAND / COLLAPSE CHEVRON INTERCEPT: Source & Destination Trees ---
+                if (e.Y > headerHeight && e.Y < mainContentHeight) {
+                    // Source Tree Check
+                    if (e.X < centerLeft && SourceRoot != null) {
+                        float contentMouseY = e.Y - (headerHeight + 8f + sourceVirtualScrollY);
+                        float traversalY = 0f;
+                        if (TryToggleNodeExpansion(SourceRoot, contentMouseY, e.X, 4f, 0, ref traversalY)) {
+                            Invalidate();
+                            return;
+                        }
+                    }
+                    // Destination Tree Check
+                    else if (e.X > centerRight && DestinationRoot != null) {
+                        float contentMouseY = e.Y - (headerHeight + 8f + destinationVirtualScrollY);
+                        float traversalY = 0f;
+                        if (TryToggleNodeExpansion(DestinationRoot, contentMouseY, e.X, centerRight, 0, ref traversalY)) {
+                            Invalidate();
+                            return;
+                        }
+                    }
+                }
+
                 // --- 1. SOURCE PANEL SCROLLBAR TRACK & THUMB HIT TEST ---
                 if (e.X < leftTreeWidth && e.Y >= headerHeight && e.Y < mainContentHeight) {
                     float sourceViewableHeight = mainContentHeight - headerHeight;
@@ -1721,7 +1731,7 @@ public class SkiaMapperControl : SKControl {
                             MainForm.SourcePath = ofd.FileName;
                         }
 
-                      
+
                         try {  // 2. Reload and reparse the source schema tree using MainForm's parser
                             this.SourceRoot = MainForm.LoadSchemaFromFile(ofd.FileName);
                         } catch (Exception ex) {
@@ -1819,7 +1829,22 @@ public class SkiaMapperControl : SKControl {
                 break;
         }
     }
-    //============================================1733
+
+
+    private void ProcessRightClickWireSelection(MouseEventArgs e) {
+        var rightHitConnection = FindConnectionAtPosition(e.X, e.Y);
+        if (rightHitConnection != null) {
+            contextTargetConnection = rightHitConnection;
+            selectedConnection = rightHitConnection;
+            selectedCanvasInstance = null;
+            Invalidate();
+            connectionContextMenu?.Show(this, e.Location);
+        }
+    }
+
+    #endregion Modularized MouseDown  Intercept Engine Block Helpers
+
+    //============================================1822
     protected override void OnKeyDown(KeyEventArgs e) {
         base.OnKeyDown(e);
 
@@ -2283,4 +2308,35 @@ public class SkiaMapperControl : SKControl {
     }
     #endregion LoadConfiguration 1795
 
+    private bool TryToggleNodeExpansion(SchemaNode node, float contentMouseY, float mouseX, float treeLeftX, int currentDepth, ref float currentY) {
+        float nodeHeight = 22f;
+        float rowHeight = nodeHeight + 4f;
+
+        // Check if click is vertically within this node row
+        if (contentMouseY >= currentY && contentMouseY <= currentY + nodeHeight) {
+            // Calculate the approximate X bounding box for this node's expand/collapse glyph
+            float indentSpacing = 15f;
+            float glyphHitLeft = treeLeftX + 6f + (currentDepth * indentSpacing);
+            float glyphHitRight = glyphHitLeft + 20f; // Width tolerance for chevron/arrow
+
+            if (node.Children != null && node.Children.Count > 0 && mouseX >= glyphHitLeft && mouseX <= glyphHitRight) {
+                node.IsExpanded = !node.IsExpanded;
+                return true; // Successfully toggled via chevron click
+            }
+            return false; // Clicked the node row text/body, do not toggle expansion (allow wire drag)
+        }
+
+        currentY += rowHeight;
+
+        // Recurse into expanded children
+        if (node.IsExpanded && node.Children != null) {
+            foreach (var child in node.Children) {
+                if (TryToggleNodeExpansion(child, contentMouseY, mouseX, treeLeftX, currentDepth + 1, ref currentY)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 }
