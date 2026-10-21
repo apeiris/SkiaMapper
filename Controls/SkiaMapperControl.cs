@@ -10,6 +10,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
+using System.Security.Cryptography;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
@@ -116,39 +117,31 @@ public class SkiaMapperControl : SKControl {
         this.DoubleBuffered = true;
         this.Dock = DockStyle.Fill;
         this.SetStyle(ControlStyles.Selectable, true);
-
         // 1. Initialize Functoid Context Menu
         functoidContextMenu = new ContextMenuStrip();
-
         var editScriptItem = new ToolStripMenuItem("Configure Script Block...");
         editScriptItem.Click += EditScriptItem_Click;
         functoidContextMenu.Items.Add(editScriptItem);
-
-
         // --- NEW: Add Duplicate Item to Functoid Context Menu ---
         var duplicateFunctoidItem = new ToolStripMenuItem("Duplicate Functoid");
         duplicateFunctoidItem.Click += DuplicateFunctoidItem_Click;
         functoidContextMenu.Items.Add(duplicateFunctoidItem);
-
-
         // --- ADDITION: Add Delete Item to Functoid Context Menu ---
         var deleteFunctoidItem = new ToolStripMenuItem("Delete Functoid");
         deleteFunctoidItem.Click += DeleteFunctoidItem_Click;
         functoidContextMenu.Items.Add(deleteFunctoidItem);
-
         // 2. Initialize Connection Wire Context Menu
         connectionContextMenu = new ContextMenuStrip();
         var deleteConnItem = new ToolStripMenuItem("Delete Connection Wire");
         deleteConnItem.Click += DeleteConnectionItem_Click;
         connectionContextMenu.Items.Add(deleteConnItem);
-
         // 3. Native Mouse Wheel Scroll Intercept Hook
         this.MouseWheel += SkiaMapperControl_MouseWheel;
-
         // 4. Automated Canvas State Architecture Hook
         // Automatically sets IsCanvasDirty = true on any layout additions, deletions, or clears
         ActiveFunctoids.CollectionChanged += OnCanvasStructureChanged;
         Connections.CollectionChanged += OnCanvasStructureChanged;
+       
     }
     /// <summary>
     /// Execution pipeline endpoint triggered by the toolbox transform button.
@@ -188,7 +181,6 @@ public class SkiaMapperControl : SKControl {
             AutoFadeMessageBox.Show("Error during xslt transformation, Error copied to clipboard", "failed", 5000);
         }
     }
-
     private void BtnExecuteExistingXslt_Click(object? sender, EventArgs e) {
         using var openXsltDialog = new OpenFileDialog {
             Filter = "XSLT Files (*.xslt;*.xsl)|*.xslt;*.xsl|All Files (*.*)|*.*",
@@ -231,12 +223,9 @@ public class SkiaMapperControl : SKControl {
             AutoFadeMessageBox.Show("Error during xslt transformation, Error copied to clipboard", "failed", 2000);
         }
     }
-
     private void OnCanvasStructureChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) {
         isCanvasDirty = true;
     }
-
-
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
         float mainContentHeight = Height - logPanelHeight;
 
@@ -296,7 +285,6 @@ public class SkiaMapperControl : SKControl {
             return;
         }
     }
-
     private float CalculateTotalToolboxContentHeight() {
         float itemHeight = 24f;
         float categoryHeaderHeight = 22f;
@@ -315,7 +303,6 @@ public class SkiaMapperControl : SKControl {
         }
         return totalHeight;
     }
-
     private void DeleteFunctoidItem_Click(object? sender, EventArgs e) {
         if (contextTargetInstance != null) {
             // 1. Cascade delete all wires tied to this specific instance ID (String-to-String comparison)
@@ -357,7 +344,6 @@ public class SkiaMapperControl : SKControl {
             this.Invalidate();
         }
     }
-
     private static SchemaNode? FindNodeWithFullPathAtPosition(SchemaNode node, float mouseY, string parentPath, ref string foundPath) {
         string currentPath = string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath}/{node.Name}";
         float halfHeight = (node.LastRenderedHeight > 0 ? node.LastRenderedHeight : 22f) / 2f;
@@ -379,7 +365,6 @@ public class SkiaMapperControl : SKControl {
 
         return null;
     }
-
     #region FindConnectionAtPosition 383
     private MappingConnection? FindConnectionAtPosition(float mouseX, float mouseY, float maxDistance = 12f) {
         if (Connections == null) return null;
@@ -478,9 +463,6 @@ public class SkiaMapperControl : SKControl {
             Invalidate();
         }
     }
-
-
-
     public int GetFunctoidInputCount(FunctoidInstance instance) {
         if (instance?.Definition == null) return 1;
 
@@ -517,7 +499,6 @@ public class SkiaMapperControl : SKControl {
         float slotHeight = instance.Height / totalSlots;
         return instance.Y + (slotIndex * slotHeight) + (slotHeight / 2f);
     }
-
     #region Paint and Render methods
 
     #region RenderTreeElement 523
@@ -1643,7 +1624,6 @@ public class SkiaMapperControl : SKControl {
         float headerHeight = 32f;
         float centerLeft = leftTreeWidth;
         float centerRight = Width - rightTreeWidth;
-
         switch (e.Button) {
             case MouseButtons.Left:
                 // --- 1. SOURCE PANEL SCROLLBAR TRACK & THUMB HIT TEST ---
@@ -1654,16 +1634,13 @@ public class SkiaMapperControl : SKControl {
                         float trackLeft = leftTreeWidth - scrollbarWidth - 4f;
                         float trackTop = headerHeight + 4f;
                         float trackHeight = sourceViewableHeight - 8f;
-
                         float viewRatio = trackHeight / maxSourceContentHeight;
                         float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
                         float scrollMaxVirtual = maxSourceContentHeight - trackHeight;
                         float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-sourceVirtualScrollY / scrollMaxVirtual);
                         float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
-
                         SKRect trackRect = new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight);
                         SKRect thumbRect = new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight);
-
                         if (trackRect.Contains(e.X, e.Y)) {
                             if (thumbRect.Contains(e.X, e.Y)) {
                                 // Clicked directly on the thumb -> Prepare for dragging
@@ -1683,7 +1660,6 @@ public class SkiaMapperControl : SKControl {
                         }
                     }
                 }
-
                 // --- 2. DESTINATION PANEL SCROLLBAR TRACK & THUMB HIT TEST ---
                 if (e.X > centerRight && e.Y >= headerHeight && e.Y < mainContentHeight) {
                     float destViewableHeight = mainContentHeight - headerHeight;
@@ -1692,16 +1668,13 @@ public class SkiaMapperControl : SKControl {
                         float trackLeft = Width - scrollbarWidth - 4f;
                         float trackTop = headerHeight + 4f;
                         float trackHeight = destViewableHeight - 8f;
-
                         float viewRatio = trackHeight / maxDestinationContentHeight;
                         float thumbHeight = Math.Max(25f, trackHeight * viewRatio);
                         float scrollMaxVirtual = maxDestinationContentHeight - trackHeight;
                         float scrollPercent = scrollMaxVirtual <= 0 ? 0 : (-destinationVirtualScrollY / scrollMaxVirtual);
                         float thumbTop = trackTop + ((trackHeight - thumbHeight) * scrollPercent);
-
                         SKRect trackRect = new SKRect(trackLeft, trackTop, trackLeft + scrollbarWidth, trackTop + trackHeight);
                         SKRect thumbRect = new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight);
-
                         if (trackRect.Contains(e.X, e.Y)) {
                             if (thumbRect.Contains(e.X, e.Y)) {
                                 // Clicked directly on the thumb -> Prepare for dragging
@@ -1721,20 +1694,14 @@ public class SkiaMapperControl : SKControl {
                         }
                     }
                 }
-
                 if (sourceFileEllipsisRect.Contains(e.X, e.Y)) {
                     using var ofd = new OpenFileDialog {
                         Filter = "Any extension |*.*",
                         Title = "None Xml extensions causes conversion to Xml schema"
                     };
-
-                  
-
                     if (ofd.ShowDialog() == DialogResult.OK) {
                         MainForm.SourcePath = ofd.FileName;
-
-                        // 1. Clear active canvas and connection state
-                        ActiveFunctoids.Clear();
+                        ActiveFunctoids.Clear();    // 1. Clear active canvas and connection state
                         Connections.Clear();
                         dragSource = null;
                         draggingCanvasInstance = null;
@@ -1742,8 +1709,6 @@ public class SkiaMapperControl : SKControl {
                         selectedConnection = null;
                         contextTargetInstance = null;
                         contextTargetConnection = null;
-
-
                         if (Path.GetExtension(ofd.FileName).ToLower() != ".xml") {
                             // attempt to parse to xml 
                             X12Parser parser = new X12Parser();
@@ -1756,8 +1721,8 @@ public class SkiaMapperControl : SKControl {
                             MainForm.SourcePath = ofd.FileName;
                         }
 
-                        // 2. Reload and reparse the source schema tree using MainForm's parser
-                        try {
+                      
+                        try {  // 2. Reload and reparse the source schema tree using MainForm's parser
                             this.SourceRoot = MainForm.LoadSchemaFromFile(ofd.FileName);
                         } catch (Exception ex) {
                             MessageBox.Show(
@@ -1768,7 +1733,6 @@ public class SkiaMapperControl : SKControl {
                             );
                             this.SourceRoot = null;
                         }
-
                         // 3. Reset workspace state flags and repaint
                         isCanvasDirty = false;
                         Invalidate(); // Repaint canvas header and left tree panel
@@ -1974,7 +1938,6 @@ public class SkiaMapperControl : SKControl {
             Cursor = Cursors.Default;
         }
     }
-
     private static string ExtractMethodNameFromTemplate(string template, string functoidName, int functoidId) {
         if (string.IsNullOrWhiteSpace(template)) {
             // Fallback clean name alpha-numeric format strip
@@ -2000,8 +1963,6 @@ public class SkiaMapperControl : SKControl {
 
         return $"Transform_{functoidName.Replace(" ", "")}_{functoidId}";
     }
-
-
     public void OnFunctoidScriptModified(FunctoidInstance instance) {
         if (instance == null) return;
 
@@ -2041,9 +2002,6 @@ public class SkiaMapperControl : SKControl {
         // 3. Force SkiaSharp window frame redraw to update the UI instantly
         Invalidate();
     }
-
-
-
     private SKPoint GetSourceEndpointLocation(ConnectionEndpoint source) {
         if (source == null) return SKPoint.Empty;
 
@@ -2067,7 +2025,6 @@ public class SkiaMapperControl : SKControl {
 
         return SKPoint.Empty;
     }
-
     private SKPoint GetTargetEndpointLocation(ConnectionEndpoint target) {
         if (target == null) return SKPoint.Empty;
 
@@ -2094,9 +2051,6 @@ public class SkiaMapperControl : SKControl {
 
         return SKPoint.Empty;
     }
-
-
-
     #region PruneOrphanedConnections
     public void PruneOrphanedConnections(FunctoidInstance instance) {
         if (instance == null || instance.Definition == null) return;
@@ -2124,7 +2078,6 @@ public class SkiaMapperControl : SKControl {
         // the wire from the list automatically breaks the layout binding on the Skia canvas.
     }
     #endregion PruneOrphanedConnections 1596/1589
-
     #region OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
 
     protected override void OnMouseUp(MouseEventArgs e) {
@@ -2278,8 +2231,6 @@ public class SkiaMapperControl : SKControl {
         }
     }
     #endregion 1396/1737 OnMouseUp Handlers for Drag-and-Drop and Connection Finalization
-
-
     public string SaveConfiguration() {
         var state = new MappingProjectState {
             ActiveFunctoids = this.ActiveFunctoids.ToList(),
