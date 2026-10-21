@@ -15,8 +15,8 @@
 		<JoinOperator>, </JoinOperator>
 		<ScriptTemplate>
 			<![CDATA[
-      public string Concatenate(params string[] args) {
-          return string.Concat(args);
+      public string Concatenate(string a, string b) {
+          return string.Concat(a,b);
       }
       ]]>
 		</ScriptTemplate>
