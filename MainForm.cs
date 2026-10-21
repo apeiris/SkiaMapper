@@ -6,19 +6,13 @@ using System.IO;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
-
 namespace SkiaMapper {
     public partial class MainForm : Form {
-
-        // Static Path Accessors
-        public static string SourcePath { get;  set; } = string.Empty;
-        public static string DestinationPath { get;  set; } = string.Empty;
+        public static string SourcePath { get; set; } = string.Empty;
+        public static string DestinationPath { get; set; } = string.Empty;
         public static string XsltPath { get; set; } = string.Empty;
-
-        // Repository Fields
         private string repositorySourcePath = string.Empty;
         private string repositoryDestinationPath = string.Empty;
-
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         [Browsable(false)]
         public string RepositorySourcePath {
@@ -31,7 +25,6 @@ namespace SkiaMapper {
                 }
             }
         }
-
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         [Browsable(false)]
         public string RepositoryDestinationPath {
@@ -44,12 +37,10 @@ namespace SkiaMapper {
                 }
             }
         }
-
         public MainForm() {
             InitializeComponent();
             WireEvents();
         }
-
         private void WireEvents() {
             txtRepositorySource.TextChanged += (s, e) => {
                 repositorySourcePath = txtRepositorySource.Text;
@@ -69,37 +60,26 @@ namespace SkiaMapper {
             btnBrowseDestination.Click += (s, e) => BrowseForFile(isSource: false);
             btnBrowseXslt.Click += (s, e) => BrowseForFile(isSource: false, ftypes: "XSLT Files (*.xslt)|*.xslt|All Files (*.*)|*.*");
         }
-
         protected override void OnLoad(EventArgs e) {
             base.OnLoad(e);
-
             // Guard against running file IO/Roslyn parsing during Visual Studio design mode
             if (LicenseManager.UsageMode == LicenseUsageMode.Designtime || DesignMode) {
                 return;
             }
-
-            // Default fallback path values at runtime
             string defaultSource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "850_POMultiline.xml");
             string defaultDest = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "outputSchema.xml");
             string defaultXslt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Transform.xslt");
-
-          
-
-                if (string.IsNullOrEmpty(RepositorySourcePath)) RepositorySourcePath = defaultSource;
+            if (string.IsNullOrEmpty(RepositorySourcePath)) RepositorySourcePath = defaultSource;
             if (string.IsNullOrEmpty(RepositoryDestinationPath)) RepositoryDestinationPath = defaultDest;
             if (string.IsNullOrEmpty(XsltPath)) XsltPath = defaultXslt;
-
             EnsureSpecimenFilesExist(RepositorySourcePath, RepositoryDestinationPath);
-            
-            // Populate and trigger rendering engine
-         
             LoadBuiltInFunctoids();
             if (File.Exists(defaultSource)) {
-                SchemaNode? sroot=LoadSchemaFromFile(defaultSource);
+                SchemaNode? sroot = LoadSchemaFromFile(defaultSource);
                 if (sroot != null) {
                     mapperControl.SourceRoot = sroot;
-                }   
-                SchemaNode? droot= LoadSchemaFromFile(defaultDest);
+                }
+                SchemaNode? droot = LoadSchemaFromFile(defaultDest);
 
                 if (droot != null) {
                     mapperControl.DestinationRoot = droot;
@@ -108,7 +88,6 @@ namespace SkiaMapper {
                 mapperControl.Invalidate();
             }
         }
-
         private void LoadBuiltInFunctoids() {
             try {
                 string functoidsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BuiltInFunctoids.xml");
@@ -144,7 +123,6 @@ namespace SkiaMapper {
                                 "Functoid Layout Sync Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
         private void BrowseForFile(bool isSource, string ftypes = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*") {
             using (OpenFileDialog ofd = new OpenFileDialog()) {
                 ofd.Filter = ftypes;
@@ -162,13 +140,10 @@ namespace SkiaMapper {
                     } else {
                         RepositoryDestinationPath = ofd.FileName;
                     }
-                  
+
                 }
             }
         }
-
-       
-
         public static SchemaNode? LoadSchemaFromFile(string filePath) {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
                 return null;
@@ -180,7 +155,6 @@ namespace SkiaMapper {
                 ? BuildSchemaTreeFromXmlStatic(doc.DocumentElement)
                 : null;
         }
-
         private static SchemaNode BuildSchemaTreeFromXmlStatic(XmlElement xmlElement, int currentDepth = 0) {
             string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
                 ? xmlElement.LocalName
@@ -257,7 +231,6 @@ namespace SkiaMapper {
 
             return treeNode;
         }
-
         private void EnsureSpecimenFilesExist(string sourcePath, string destPath) {
             if (!File.Exists(sourcePath)) {
                 string rawSourceXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
