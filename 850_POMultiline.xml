@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Interchange segment-terminator="&#xD;" element-separator="*" sub-element-separator="~">
+  <ISA>
+    <!--Author Information Qualifier-->
+    <ISA01>00<!--No Authorization Information Present--></ISA01>
+    <!--Author Information-->
+    <ISA02>        </ISA02>
+    <!--Security Information Qualifer-->
+    <ISA03>00<!--No Security Information Present--></ISA03>
+    <!--Security Information-->
+    <ISA04>          </ISA04>
+    <!--Interchange ID Qualifier-->
+    <ISA05>ZZ<!--Mutually Defined--></ISA05>
+    <!--Interchange Sender ID-->
+    <ISA06>SENDER_ID      </ISA06>
+    <!--Interchange ID Qualifier-->
+    <ISA07>ZZ<!--Mutually Defined--></ISA07>
+    <!--Interchange Receiver ID-->
+    <ISA08>RECEIVER_ID      </ISA08>
+    <!--Interchange Date-->
+    <ISA09>261020</ISA09>
+    <!--Interchange Time-->
+    <ISA10>0810</ISA10>
+    <!--Inter Control Standards Identifier-->
+    <ISA11>U<!--U.S. EDI Community of ASC X12, TDCC, and UCS--></ISA11>
+    <!--Inter Control Version Number-->
+    <ISA12>00401</ISA12>
+    <!--Inter Control Number-->
+    <ISA13>000000001</ISA13>
+    <!--Acknowlegment Requested-->
+    <ISA14>0<!--No Acknowledgment Requested--></ISA14>
+    <!--Usage Indicator-->
+    <ISA15>P<!--Production Data--></ISA15>
+    <!--Component Element Separator-->
+    <ISA16>
+      <ISA1601></ISA1601>
+      <ISA1602></ISA1602>
+    </ISA16>
+  </ISA>
+  <FunctionGroup>
+    <GS>
+      <!--Functional Identifier Code-->
+      <GS01>PO</GS01>
+      <!--Application Sender's Code-->
+      <GS02>SENDER_ID</GS02>
+      <!--Application Receiver's Code-->
+      <GS03>RECEIVER_ID</GS03>
+      <!--Date-->
+      <GS04>20261020</GS04>
+      <!--Time-->
+      <GS05>0810</GS05>
+      <!--Group Control Number-->
+      <GS06>1</GS06>
+      <!--Responsible Agency Code-->
+      <GS07>X<!--Accredited Standards Committee X12--></GS07>
+      <!--Version/Release/Industry Identifier Code-->
+      <GS08>
+        <GS0801>004010</GS0801>
+        <GS0802></GS0802>
+      </GS08>
+    </GS>
+    <Transaction ControlNumber="0001~">
+      <ST>
+        <!--Transaction Set Identifier Code-->
+        <ST01>850</ST01>
+        <!--Transaction Set Control Number-->
+        <ST02>
+          <ST0201>0001</ST0201>
+          <ST0202></ST0202>
+        </ST02>
+      </ST>
+      <BEG>
+        <BEG01>00</BEG01>
+        <BEG02>NE</BEG02>
+        <BEG03>PO12345</BEG03>
+        <BEG04></BEG04>
+        <BEG05>
+          <BEG0501>20261020</BEG0501>
+          <BEG0502></BEG0502>
+        </BEG05>
+      </BEG>
+      <REF>
+        <!--Reference Identification Qualifier-->
+        <REF01>DP</REF01>
+        <!--Reference Identification-->
+        <REF02>
+          <REF0201>010</REF0201>
+          <REF0202></REF0202>
+        </REF02>
+      </REF>
+      <DTM>
+        <!--Data/Time Qualifier-->
+        <DTM01>002</DTM01>
+        <!--Date-->
+        <DTM02>
+          <DTM0201>20261027</DTM0201>
+          <DTM0202></DTM0202>
+        </DTM02>
+      </DTM>
+      <Loop LoopId="N1" Name="Name">
+        <N1>
+          <!--Entity Identifier Code-->
+          <N101>ST</N101>
+          <!--Name-->
+          <N102>BUYER WAREHOUSE</N102>
+          <!--Identification Code Qualifier-->
+          <N103>92<!--Assigned by Buyer or Buyer's Agent--></N103>
+          <!--Identification Code-->
+          <N104>
+            <N10401>998877</N10401>
+            <N10402></N10402>
+          </N104>
+        </N1>
+        <N3>
+          <!--Address Information-->
+          <N301>
+            <N30101>123 LOGISTICS WAY</N30101>
+            <N30102></N30102>
+          </N301>
+        </N3>
+        <N4>
+          <!--City Name-->
+          <N401>TORONTO</N401>
+          <!--State or Provice Code-->
+          <N402>ON</N402>
+          <!--Postal Code-->
+          <N403>M5V 1A1</N403>
+          <!--Country Code-->
+          <N404>
+            <N40401>CA</N40401>
+            <N40402></N40402>
+          </N404>
+        </N4>
+      </Loop>
+      <Loop LoopId="PO1" Name="Baseline Item Data">
+        <PO1>
+          <PO101>1</PO101>
+          <PO102>100</PO102>
+          <PO103>EA</PO103>
+          <PO104>15.50</PO104>
+          <PO105></PO105>
+          <PO106>UP</PO106>
+          <PO107>012345678905</PO107>
+          <PO108>VN</PO108>
+          <PO109>
+            <PO10901>SKU-A100</PO10901>
+            <PO10902></PO10902>
+          </PO109>
+        </PO1>
+        <Loop LoopId="PID" Name="Product/Item Description">
+          <PID>
+            <PID01>F</PID01>
+            <PID02></PID02>
+            <PID03></PID03>
+            <PID04></PID04>
+            <PID05>
+              <PID0501>WIDGET MODEL A</PID0501>
+              <PID0502></PID0502>
+            </PID05>
+          </PID>
+        </Loop>
+      </Loop>
+      <Loop LoopId="PO1" Name="Baseline Item Data">
+        <PO1>
+          <PO101>2</PO101>
+          <PO102>50</PO102>
+          <PO103>EA</PO103>
+          <PO104>22.00</PO104>
+          <PO105></PO105>
+          <PO106>UP</PO106>
+          <PO107>012345678912</PO107>
+          <PO108>VN</PO108>
+          <PO109>
+            <PO10901>SKU-B200</PO10901>
+            <PO10902></PO10902>
+          </PO109>
+        </PO1>
+        <Loop LoopId="PID" Name="Product/Item Description">
+          <PID>
+            <PID01>F</PID01>
+            <PID02></PID02>
+            <PID03></PID03>
+            <PID04></PID04>
+            <PID05>
+              <PID0501>WIDGET MODEL B</PID0501>
+              <PID0502></PID0502>
+            </PID05>
+          </PID>
+        </Loop>
+      </Loop>
+      <Loop LoopId="PO1" Name="Baseline Item Data">
+        <PO1>
+          <PO101>3</PO101>
+          <PO102>25</PO102>
+          <PO103>EA</PO103>
+          <PO104>45.00</PO104>
+          <PO105></PO105>
+          <PO106>UP</PO106>
+          <PO107>012345678929</PO107>
+          <PO108>VN</PO108>
+          <PO109>
+            <PO10901>SKU-C300</PO10901>
+            <PO10902></PO10902>
+          </PO109>
+        </PO1>
+        <Loop LoopId="PID" Name="Product/Item Description">
+          <PID>
+            <PID01>F</PID01>
+            <PID02></PID02>
+            <PID03></PID03>
+            <PID04></PID04>
+            <PID05>
+              <PID0501>WIDGET MODEL C</PID0501>
+              <PID0502></PID0502>
+            </PID05>
+          </PID>
+        </Loop>
+      </Loop>
+      <Loop LoopId="CTT" Name="Transaction Totals">
+        <CTT>
+          <CTT01>3</CTT01>
+          <CTT02>
+            <CTT0201>175</CTT0201>
+            <CTT0202></CTT0202>
+          </CTT02>
+        </CTT>
+      </Loop>
+      <SE>
+        <!--Number of Included Segments-->
+        <SE01>18</SE01>
+        <!--Transaction Set Control Number-->
+        <SE02>
+          <SE0201>0001</SE0201>
+          <SE0202></SE0202>
+        </SE02>
+      </SE>
+    </Transaction>
+    <GE>
+      <!--Number of Transaction Sets Included-->
+      <GE01>1</GE01>
+      <!--Group Control Number-->
+      <GE02>
+        <GE0201>1</GE0201>
+        <GE0202></GE0202>
+      </GE02>
+    </GE>
+  </FunctionGroup>
+  <IEA>
+    <!--Number of Included Functional Groups-->
+    <IEA01>1</IEA01>
+    <!--Interchange Control Number-->
+    <IEA02>
+      <IEA0201>000000001</IEA0201>
+      <IEA0202></IEA0202>
+    </IEA02>
+  </IEA>
+</Interchange>

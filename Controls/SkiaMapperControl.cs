@@ -357,68 +357,60 @@ public class SkiaMapperControl : SKControl {
             this.Invalidate();
         }
     }
+
+    private static SchemaNode? FindNodeWithFullPathAtPosition(SchemaNode node, float mouseY, string parentPath, ref string foundPath) {
+        string currentPath = string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath}/{node.Name}";
+        float halfHeight = (node.LastRenderedHeight > 0 ? node.LastRenderedHeight : 22f) / 2f;
+
+        // Check children first so nested leaf nodes take precedence over containers
+        if (node.IsExpanded && node.Children != null) {
+            foreach (var child in node.Children) {
+                var found = FindNodeWithFullPathAtPosition(child, mouseY, currentPath, ref foundPath);
+                if (found != null) return found;
+            }
+        }
+
+        // Check current node with vertical tolerance for row gaps
+        float tolerance = halfHeight + 2f;
+        if (mouseY >= node.LastRenderedY - tolerance && mouseY <= node.LastRenderedY + tolerance) {
+            foundPath = currentPath;
+            return node;
+        }
+
+        return null;
+    }
+
+    #region FindConnectionAtPosition 383
     private MappingConnection? FindConnectionAtPosition(float mouseX, float mouseY, float maxDistance = 12f) {
         if (Connections == null) return null;
-
-        float centerLeft = leftTreeWidth;
 
         foreach (var conn in Connections) {
             if (conn == null || conn.Source == null || conn.Target == null) continue;
 
-            float startX = 0f, startY = 0f;
-            float endX = 0f, endY = 0f;
+            SKPoint startPt = GetSourceEndpointLocation(conn.Source);
+            SKPoint endPt = GetTargetEndpointLocation(conn.Target);
 
-            // 1. Resolve Start Point
-            if (conn.Source.Type == ConnectionEndpointType.Functoid) {
-                if (conn.Source.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
+            if (startPt.IsEmpty || endPt.IsEmpty) continue;
 
-                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
-                var instance = ActiveFunctoids.FirstOrDefault(f => f != null && f.Id == conn.Source.FunctoidInstanceId);
-                if (instance != null) {
-                    startX = centerLeft + instance.X + instance.Width;
-                    startY = instance.Y + (instance.Height / 2f);
-                } else continue;
-            } else {
-                if (string.IsNullOrEmpty(conn.Source.NodePath)) continue;
-                startY = FindNodeY(SourceRoot, conn.Source.NodePath);
-                startX = leftTreeWidth - 25f;
-                if (startY == -1) continue;
-            }
+            float startX = startPt.X;
+            float startY = startPt.Y;
+            float endX = endPt.X;
+            float endY = endPt.Y;
 
-            // 2. Resolve End Point
-            if (conn.Target.Type == ConnectionEndpointType.Functoid) {
-                if (conn.Target.FunctoidInstanceId == null || ActiveFunctoids == null) continue;
-                // --- REVISED: Use LINQ FirstOrDefault instead of List.Find ---
-                var instance = ActiveFunctoids.FirstOrDefault(f => f != null && f.Id == conn.Target.FunctoidInstanceId);
-                if (instance != null) {
-                    endX = centerLeft + instance.X;
-                    endY = instance.Y + (instance.Height / 2f);
-                } else continue;
-            } else {
-                if (string.IsNullOrEmpty(conn.Target.NodePath)) continue;
-                endY = FindNodeY(DestinationRoot, conn.Target.NodePath);
-                endX = Width - rightTreeWidth + 5f;
-                if (endY == -1) continue;
-            }
-
-            // 3. Setup Cubic Bezier Control Points
+            // Setup Cubic Bezier Control Points
             float controlOffset = Math.Max(30f, Math.Abs(endX - startX) * 0.5f);
             float cp1X = startX + controlOffset;
             float cp1Y = startY;
             float cp2X = endX - controlOffset;
             float cp2Y = endY;
 
-            // 4. DYNAMIC SAMPLING ENGINE
-            // Estimate the linear bounding distance to scale step density accurately
+            // DYNAMIC SAMPLING ENGINE
             float linearLength = (float)Math.Sqrt(Math.Pow(endX - startX, 2) + Math.Pow(endY - startY, 2));
-
-            // Dynamically assign samples: 1 sample per every 8 pixels of span, clamped between 20 and 100
             int samples = Math.Clamp((int)(linearLength / 8f), 20, 100);
 
             for (int i = 0; i <= samples; i++) {
                 float t = i / (float)samples;
 
-                // Polynomial Curve Weighting
                 float mt = 1f - t;
                 float f0 = mt * mt * mt;
                 float f1 = 3f * mt * mt * t;
@@ -428,7 +420,6 @@ public class SkiaMapperControl : SKControl {
                 float ptX = (f0 * startX) + (f1 * cp1X) + (f2 * cp2X) + (f3 * endX);
                 float ptY = (f0 * startY) + (f1 * cp1Y) + (f2 * cp2Y) + (f3 * endY);
 
-                // Distance Check
                 float dx = mouseX - ptX;
                 float dy = mouseY - ptY;
                 float distance = (float)Math.Sqrt(dx * dx + dy * dy);
@@ -440,6 +431,7 @@ public class SkiaMapperControl : SKControl {
         }
         return null;
     }
+    #endregion  FindConnectionAtPosition 464,434
     private SchemaNode? FindNodeByPath(SchemaNode? currentNode, string? path) {
         if (currentNode == null || string.IsNullOrEmpty(path)) return null;
         if (currentNode.Name == path) return currentNode;
@@ -528,8 +520,8 @@ public class SkiaMapperControl : SKControl {
 
     #region Paint and Render methods
 
-    #region RenderTreeElement
-    private float RenderTreeElement(SKCanvas canvas, SchemaNode node, float currentX, ref float currentY, bool isSourceTree, int currentDepth = 0) {
+    #region RenderTreeElement 523
+    private float RenderTreeElement(SKCanvas canvas, SchemaNode node, float currentX, ref float currentY, bool isSourceTree, int currentDepth = 0, string parentPath = "") {
         using var font = new SKFont(SKTypeface.Default, 12f);
         using var textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
         using var nodeBoxPaint = new SKPaint { Color = new SKColor(220, 230, 242), Style = SKPaintStyle.Fill };
@@ -539,21 +531,28 @@ public class SkiaMapperControl : SKControl {
         float indentSpacing = 15f;
         float totalBranchHeight = nodeHeight + 4f;
 
-        float visualCenterY = currentY + (nodeHeight / 2f);
-        node.LastRenderedY = visualCenterY;
+        string currentPath = string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath}/{node.Name}";
+
+        // Store pure content-relative vertical center
+        float contentCenterY = currentY + (nodeHeight / 2f);
+        node.LastRenderedY = contentCenterY;
         node.LastRenderedHeight = nodeHeight;
 
-        string cacheKey = node.Name;
         if (isSourceTree) {
-            _sourceNodeYCache[cacheKey] = visualCenterY;
+            _sourceNodeYCache[currentPath] = contentCenterY;
         } else {
-            _destinationNodeYCache[cacheKey] = visualCenterY;
+            _destinationNodeYCache[currentPath] = contentCenterY;
         }
+
+        // Calculate actual screen Y for rendering
+        float headerHeight = 32f;
+        float scrollY = isSourceTree ? sourceVirtualScrollY : destinationVirtualScrollY;
+        float screenRowTop = headerHeight + 8f + scrollY + currentY;
 
         float absoluteLeft = isSourceTree ? 4f : (Width - rightTreeWidth) + 4f;
         float absoluteRight = isSourceTree ? (leftTreeWidth - 12f) : (Width - 4f);
 
-        SKRect rowRect = new SKRect(absoluteLeft, currentY, absoluteRight, currentY + nodeHeight);
+        SKRect rowRect = new SKRect(absoluteLeft, screenRowTop, absoluteRight, screenRowTop + nodeHeight);
 
         canvas.Save();
         canvas.ClipRect(rowRect);
@@ -562,19 +561,19 @@ public class SkiaMapperControl : SKControl {
 
         string expandGlyph = node.Children.Count > 0 ? (node.IsExpanded ? "▼ " : "► ") : "  ";
         float textStartX = absoluteLeft + 6f + (currentDepth * indentSpacing);
-        canvas.DrawText($"{expandGlyph}{node.Name}", textStartX, currentY + 16f, font, textPaint);
+        canvas.DrawText($"{expandGlyph}{node.Name}", textStartX, screenRowTop + 16f, font, textPaint);
         canvas.Restore();
 
         currentY += nodeHeight + 4f;
 
         if (node.IsExpanded) {
             foreach (var child in node.Children) {
-                totalBranchHeight += RenderTreeElement(canvas, child, currentX, ref currentY, isSourceTree, currentDepth + 1);
+                totalBranchHeight += RenderTreeElement(canvas, child, currentX, ref currentY, isSourceTree, currentDepth + 1, currentPath);
             }
         }
         return totalBranchHeight;
     }
-    #endregion RenderTreeElement 551,536
+    #endregion RenderTreeElement 551,536,580,575
 
 
 
@@ -647,9 +646,9 @@ public class SkiaMapperControl : SKControl {
         canvas.Save();
         canvas.ClipRect(sourceClipArea);
 
-        float currentYLeft = headerHeight + 8f + sourceVirtualScrollY;
+        float currentYLeft = 0f; // <--- MUST start at 0f for pure content-relative tracking
         if (SourceRoot != null) {
-            maxSourceContentHeight = RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true);
+            maxSourceContentHeight = RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true, 0, "");
         }
         canvas.Restore();
 
@@ -725,12 +724,11 @@ public class SkiaMapperControl : SKControl {
         canvas.Save();
         canvas.ClipRect(destClipArea);
 
-        float currentYRight = headerHeight + 8f + destinationVirtualScrollY;
+        float currentYRight = 0f; // <--- MUST start at 0f for pure content-relative tracking
         if (DestinationRoot != null) {
-            maxDestinationContentHeight = RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false);
+            maxDestinationContentHeight = RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false, 0, "");
         }
         canvas.Restore();
-
         // Draw Destination Scrollbar if content overflows
         float destViewableHeight = mainContentHeight - headerHeight;
         if (maxDestinationContentHeight > destViewableHeight) {
@@ -1385,6 +1383,29 @@ public class SkiaMapperControl : SKControl {
         }
         return null;
     }
+    private static bool FindNodePathAtPosition(SchemaNode node, float mouseY, string parentPath, ref string foundPath) {
+        string currentPath = string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath}/{node.Name}";
+        float halfHeight = (node.LastRenderedHeight > 0 ? node.LastRenderedHeight : 22f) / 2f;
+
+        // Check children first so nested leaf nodes take precedence over containers
+        if (node.IsExpanded && node.Children != null) {
+            foreach (var child in node.Children) {
+                if (FindNodePathAtPosition(child, mouseY, currentPath, ref foundPath)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check current node with vertical tolerance for row gaps
+        float tolerance = halfHeight + 2f;
+        if (mouseY >= node.LastRenderedY - tolerance && mouseY <= node.LastRenderedY + tolerance) {
+            foundPath = currentPath;
+            return true;
+        }
+
+        return false;
+    }
+
     #region  Modularized MouseDown  Intercept Engine Block Helpers
     private void ProcessLeftClickToolPalette(MouseEventArgs e) {
         var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
@@ -1536,16 +1557,26 @@ public class SkiaMapperControl : SKControl {
     }
 
     private bool ProcessLeftClickSourceTree(MouseEventArgs e) {
-        SchemaNode? targetedNode = FindNodeAtPosition(SourceRoot, e.Y);
-        if (targetedNode != null) {
-            dragSource = new ConnectionEndpoint {
-                Type = ConnectionEndpointType.SourceNode,
-                NodePath = targetedNode.Name
-            };
-            currentDragPoint = new PointF(leftTreeWidth - 25f, targetedNode.LastRenderedY);
-            Capture = true;
-            Invalidate();
-            return true;
+        string matchedPath = string.Empty;
+        float headerHeight = 32f;
+
+        // Translate screen mouse Y to content-relative Y by subtracting header height and virtual scroll offset
+        float contentMouseY = e.Y - (headerHeight + 8f + sourceVirtualScrollY);
+
+        if (SourceRoot != null && FindNodePathAtPosition(SourceRoot, contentMouseY, "", ref matchedPath)) {
+            if (_sourceNodeYCache.TryGetValue(matchedPath, out float contentY)) {
+                dragSource = new ConnectionEndpoint {
+                    Type = ConnectionEndpointType.SourceNode,
+                    NodePath = matchedPath // Full hierarchical path
+                };
+
+                // Calculate exact screen Y for the drag anchor point
+                float screenY = headerHeight + 8f + sourceVirtualScrollY + contentY;
+                currentDragPoint = new PointF(leftTreeWidth - 25f, screenY);
+                Capture = true;
+                Invalidate();
+                return true;
+            }
         }
         return false;
     }
@@ -2011,18 +2042,20 @@ public class SkiaMapperControl : SKControl {
         Invalidate();
     }
 
+
+
     private SKPoint GetSourceEndpointLocation(ConnectionEndpoint source) {
         if (source == null) return SKPoint.Empty;
 
-        // Source is an XML element node from the Left Tree Panel
         if (source.Type == ConnectionEndpointType.SourceNode) {
-            if (_sourceNodeYCache.TryGetValue(source.NodePath, out float exactY)) {
-                return new SKPoint(leftTreeWidth, exactY);
+            if (_sourceNodeYCache.TryGetValue(source.NodePath, out float contentY)) {
+                float headerHeight = 32f;
+                float screenY = headerHeight + 8f + sourceVirtualScrollY + contentY;
+                return new SKPoint(leftTreeWidth, screenY);
             }
-            return SKPoint.Empty; // Hide wire if node is collapsed/hidden
+            return SKPoint.Empty;
         }
 
-        // Source is an outbound port (Right Side Edge) of a canvas functoid
         if (source.Type == ConnectionEndpointType.Functoid && source.FunctoidInstanceId.HasValue) {
             var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == source.FunctoidInstanceId.Value);
             if (instance != null) {
@@ -2038,33 +2071,22 @@ public class SkiaMapperControl : SKControl {
     private SKPoint GetTargetEndpointLocation(ConnectionEndpoint target) {
         if (target == null) return SKPoint.Empty;
 
-        // Target is a destination tree schema node in the Right Tree Panel
         if (target.Type == ConnectionEndpointType.DestinationNode) {
-            if (_destinationNodeYCache.TryGetValue(target.NodePath, out float exactY)) {
+            if (_destinationNodeYCache.TryGetValue(target.NodePath, out float contentY)) {
+                float headerHeight = 32f;
+                float screenY = headerHeight + 8f + destinationVirtualScrollY + contentY;
                 float absoluteX = Width - rightTreeWidth;
-                return new SKPoint(absoluteX, exactY);
+                return new SKPoint(absoluteX, screenY);
             }
-            return SKPoint.Empty; // Hide wire if node is collapsed/hidden
+            return SKPoint.Empty;
         }
 
-        // Target is an input port slice (Left Side Edge) of a canvas functoid
         if (target.Type == ConnectionEndpointType.Functoid && target.FunctoidInstanceId.HasValue) {
             var instance = ActiveFunctoids.FirstOrDefault(f => f.Id == target.FunctoidInstanceId.Value);
             if (instance != null) {
                 float absoluteX = leftTreeWidth + instance.X;
-
-                // 1. Fetch the fresh, post-modification parameter slot count
                 int availableSlots = GetFunctoidInputCount(instance);
-
-                // 2. DEFENSIVE CLAMP: Protect against out-of-bounds indexes caused by script modifications
-                int safeInputIndex = target.InputIndex;
-                if (safeInputIndex >= availableSlots) {
-                    // Automatically snap the line down to the lowest remaining valid input slot
-                    safeInputIndex = availableSlots - 1;
-                    if (safeInputIndex < 0) safeInputIndex = 0;
-                }
-
-                // 3. Compute coordinates cleanly using the validated index
+                int safeInputIndex = Math.Clamp(target.InputIndex, 0, Math.Max(0, availableSlots - 1));
                 float absoluteY = GetFunctoidInputSlotY(instance, safeInputIndex);
                 return new SKPoint(absoluteX, absoluteY);
             }
@@ -2072,6 +2094,9 @@ public class SkiaMapperControl : SKControl {
 
         return SKPoint.Empty;
     }
+
+
+
     #region PruneOrphanedConnections
     public void PruneOrphanedConnections(FunctoidInstance instance) {
         if (instance == null || instance.Definition == null) return;
@@ -2157,12 +2182,16 @@ public class SkiaMapperControl : SKControl {
             ConnectionEndpoint? dragTarget = null;
 
             // EVALUATE TARGET: Dropped onto a Destination Tree Node?
+            // EVALUATE TARGET: Dropped onto a Destination Tree Node?
             if (e.X > centerRight && e.Y < mainContentHeight && DestinationRoot != null) {
-                SchemaNode? targetedNode = FindDestinationNodeAtPosition(DestinationRoot, e.Y);
+                float headerHeight = 32f;
+                float contentMouseY = e.Y - (headerHeight + 8f + destinationVirtualScrollY);
+                string matchedPath = string.Empty;
+                SchemaNode? targetedNode = FindNodeWithFullPathAtPosition(DestinationRoot, contentMouseY, "", ref matchedPath);
                 if (targetedNode != null) {
                     dragTarget = new ConnectionEndpoint {
                         Type = ConnectionEndpointType.DestinationNode,
-                        NodePath = targetedNode.Name, // Destination mappings trace to target node identifiers
+                        NodePath = matchedPath, // Stores full hierarchical path matching _destinationNodeYCache
                         InputIndex = 0
                     };
                 }

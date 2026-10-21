@@ -36,29 +36,12 @@ namespace SkiaMapper.Services {
                 MessageBox.Show("The workspace canvas contains no connections to compile.", "XSLT Engine Notice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
             try {
-                // Clear state cache before starting compilation path tracking
                 _instanceFallbackParameterCache.Clear();
-
                 string xsltOutput = CompileXsltPayload();
-
-                using (var sfd = new SaveFileDialog()) {
-                    sfd.Filter = "XSLT Stylesheet (*.xslt)|*.xslt";
-                    sfd.Title = "Save Generated Canvas XSLT Map";
-                    sfd.FileName = "CanvasMapExport.xslt";
-                   
-                   
-                    if (sfd.ShowDialog() == DialogResult.OK) {
-                        File.WriteAllText(sfd.FileName, xsltOutput, Encoding.UTF8);
-                        
-                        MainForm.XsltPath = sfd.FileName;
-                   
-                        // MessageBox.Show("Successfully generated XSLT map with accurate graph tracing!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                       // MainForm.ActiveForm.Text = $"XSLT [  {sfd.FileName} ] generated";
-                        MainForm.XsltPath = sfd.FileName; 
-                    }
-                }
+                string xsltName = "CanvasMapExport.xslt";
+                File.WriteAllText(xsltName, xsltOutput, Encoding.UTF8);
+                MainForm.XsltPath = xsltName;
             } catch (Exception ex) {
                 MessageBox.Show($"XSLT generation failed:\n{ex.Message}", "Pipeline Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -179,6 +162,7 @@ namespace SkiaMapper.Services {
             return Activator.CreateInstance(type)!;
         }
 
+
         private string CompileXsltPayload() {
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
@@ -200,8 +184,6 @@ namespace SkiaMapper.Services {
             }
 
             foreach (var prefix in discoveredPrefixes) {
-                // Map the prefix to a generic or default schema namespace URI 
-                // (or adapt this if your SchemaNode model stores actual namespace URIs)
                 sb.AppendLine($"                xmlns:{prefix}=\"http://tempuri.org/{prefix}\"");
             }
 
@@ -209,37 +191,65 @@ namespace SkiaMapper.Services {
             sb.AppendLine("  <xsl:output method=\"xml\" indent=\"yes\" encoding=\"utf-8\"/>");
             sb.AppendLine();
 
-            // -------------------------------------------------------------------------
-            // BUILD THE TEMPLATE TRANSFORMATION STRUCTURAL TREE
-            // -------------------------------------------------------------------------
             sb.AppendLine("  <xsl:template match=\"/\">");
-            sb.AppendLine("    <Output>");
 
             var terminalConnections = _connections
                 .Where(c => c.Target != null && c.Target.Type == ConnectionEndpointType.DestinationNode)
-                .OrderBy(c => c.Target.NodePath)
                 .ToList();
 
+            // Build hierarchical tree structure from paths like "po/billto/a1"
+            var rootNode = new XsltTreeNode { Name = "Root" };
             foreach (var connection in terminalConnections) {
-                string targetNodeName = connection.Target.NodePath;
-                sb.AppendLine($"      <{targetNodeName}>");
+                string path = connection.Target.NodePath;
+                if (string.IsNullOrEmpty(path)) continue;
 
-                string nodeExpression = TraceSourceEndpoint(connection.Source, out bool isFunctoidCall);
-
-                if (!string.IsNullOrEmpty(nodeExpression)) {
-                    sb.AppendLine($"        <xsl:value-of select=\"{nodeExpression}\" />");
+                string[] segments = path.Split('/');
+                var currentNode = rootNode;
+                foreach (var segment in segments) {
+                    if (!currentNode.Children.TryGetValue(segment, out var child)) {
+                        child = new XsltTreeNode { Name = segment };
+                        currentNode.Children[segment] = child;
+                    }
+                    currentNode = child;
                 }
-
-                sb.AppendLine($"      </{targetNodeName}>");
+                currentNode.ValueExpression = TraceSourceEndpoint(connection.Source, out bool isFunctoidCall);
             }
 
-            sb.AppendLine("    </Output>");
+            // Recursively render the nested XML structure into the XSLT template
+            foreach (var child in rootNode.Children.Values) {
+                RenderNodeRecursive(child, sb, 2);
+            }
+
             sb.AppendLine("  </xsl:template>");
             sb.AppendLine("</xsl:stylesheet>");
 
             return sb.ToString();
         }
 
+        private class XsltTreeNode {
+            public string Name { get; set; } = "";
+            public Dictionary<string, XsltTreeNode> Children { get; } = new Dictionary<string, XsltTreeNode>();
+            public string? ValueExpression { get; set; }
+        }
+
+        private void RenderNodeRecursive(XsltTreeNode node, StringBuilder sb, int indentLevel) {
+            string indent = new string(' ', indentLevel * 2);
+            if (node.Children.Count == 0) {
+                if (!string.IsNullOrEmpty(node.ValueExpression)) {
+                    sb.AppendLine($"{indent}<{node.Name}>");
+                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{node.ValueExpression}\" />");
+                    sb.AppendLine($"{indent}</{node.Name}>");
+                } else {
+                    sb.AppendLine($"{indent}<{node.Name}/>");
+                }
+            } else {
+                sb.AppendLine($"{indent}<{node.Name}>");
+                foreach (var child in node.Children.Values) {
+                    RenderNodeRecursive(child, sb, indentLevel + 1);
+                }
+                sb.AppendLine($"{indent}</{node.Name}>");
+            }
+        }
         /// <summary>
         /// Recursively walks the canvas graph topology backward to compile properly formatted 
         /// nested function arguments, accounting for literal parameter fallbacks and missing connection slots.

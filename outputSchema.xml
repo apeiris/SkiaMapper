@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<po>
+	<billto>
+		<a1></a1>
+		<a2></a2>
+		<postalCode></postalCode>
+		<City></City>
+		<Country></Country>
+	</billto>
+	<DeliverTo>
+		<a1></a1>
+		<a2></a2>
+		<postalCode></postalCode>
+		<City></City>
+		<Country></Country>
+	</DeliverTo>
+	<lines>
+		<!-- 101 =id,102=qty,103=uom,104=price,106= pidQ(ProdId Qualifier),107=prodId, description=501 from pid051 from pid loop -->
+		<line id="1" qty="10" uom="ea" price="22.00" pidq="VN" pid="123915" description="ESP32-S3 8MB "  ></line>
+		<line id="2" qty="8" uom="ea" price="22.00" pidq="VN"  pid="233125" description="Proximity Sensor"  ></line>
+	</lines>
+</po>
