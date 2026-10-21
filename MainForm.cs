@@ -79,19 +79,34 @@ namespace SkiaMapper {
             }
 
             // Default fallback path values at runtime
-            string defaultSource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SourceProfile.xml");
-            string defaultDest = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DestinationUser.xml");
+            string defaultSource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "850_POMultiline.xml");
+            string defaultDest = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "outputSchema.xml");
             string defaultXslt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Transform.xslt");
 
-            if (string.IsNullOrEmpty(RepositorySourcePath)) RepositorySourcePath = defaultSource;
+          
+
+                if (string.IsNullOrEmpty(RepositorySourcePath)) RepositorySourcePath = defaultSource;
             if (string.IsNullOrEmpty(RepositoryDestinationPath)) RepositoryDestinationPath = defaultDest;
             if (string.IsNullOrEmpty(XsltPath)) XsltPath = defaultXslt;
 
             EnsureSpecimenFilesExist(RepositorySourcePath, RepositoryDestinationPath);
-
+            
             // Populate and trigger rendering engine
-            LoadMockSchemaFiles();
+         
             LoadBuiltInFunctoids();
+            if (File.Exists(defaultSource)) {
+                SchemaNode? sroot=LoadSchemaFromFile(defaultSource);
+                if (sroot != null) {
+                    mapperControl.SourceRoot = sroot;
+                }   
+                SchemaNode? droot= LoadSchemaFromFile(defaultDest);
+
+                if (droot != null) {
+                    mapperControl.DestinationRoot = droot;
+                }
+
+                mapperControl.Invalidate();
+            }
         }
 
         private void LoadBuiltInFunctoids() {
@@ -147,47 +162,12 @@ namespace SkiaMapper {
                     } else {
                         RepositoryDestinationPath = ofd.FileName;
                     }
-                    LoadMockSchemaFiles();
+                  
                 }
             }
         }
 
-        private void LoadMockSchemaFiles() {
-            try {
-                if (string.IsNullOrEmpty(RepositorySourcePath) || string.IsNullOrEmpty(RepositoryDestinationPath)) {
-                    return;
-                }
-
-                if (File.Exists(RepositorySourcePath)) {
-                    XmlDocument sourceDoc = new XmlDocument();
-                    sourceDoc.Load(RepositorySourcePath);
-                    if (sourceDoc.DocumentElement != null) {
-                        mapperControl.SourceRoot = BuildSchemaTreeFromXml(sourceDoc.DocumentElement);
-                    }
-                }
-
-                if (File.Exists(RepositoryDestinationPath)) {
-                    XmlDocument destDoc = new XmlDocument();
-                    destDoc.Load(RepositoryDestinationPath);
-                    if (destDoc.DocumentElement != null) {
-                        mapperControl.DestinationRoot = BuildSchemaTreeFromXml(destDoc.DocumentElement);
-                    }
-                }
-
-                if (mapperControl.ActiveFunctoids.Count == 0) {
-                    mapperControl.ActiveFunctoids.Add(new FunctoidInstance {
-                        X = 150,
-                        Y = 60,
-                        Definition = new FunctoidDefinition { Name = "Concatenate", Id = 100 }
-                    });
-                }
-
-                mapperControl.Invalidate();
-            } catch (Exception ex) {
-                MessageBox.Show($"Error deserializing XML schemas: {ex.Message}",
-                                "Schema Parse Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
+       
 
         public static SchemaNode? LoadSchemaFromFile(string filePath) {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
