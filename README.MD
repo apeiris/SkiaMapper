@@ -272,24 +272,24 @@ When extending or adding custom functoids to `BuiltInFunctoids.xml`, adhere to t
 </BuiltInFunctoids>
 ```
 ### 1. `XsltMapGenerator`
-The master compilation block that converts graph nodes and wire configurations into standard-compliant XSLT files[cite: 3]. It coordinates the data lifecycle through two explicit execution layers:
+The master compilation block that converts graph nodes and wire configurations into standard-compliant XSLT files. It coordinates the data lifecycle through two explicit execution layers:
 
-* **Roslyn AST Signature Stripping:** Scans customized `FunctoidInstance` scripts using C# syntax nodes[cite: 3]. It automatically isolates parameter value defaults (e.g., `= 5`) to inject into an internal fallback cache[cite: 3], sanitizes parameter data constraints (casting data boundaries from `int` to `double` safely for XSLT environments)[cite: 3], and re-maps inputs with runtime inline variables to completely avoid data collision boundaries[cite: 3].
-* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins[cite: 3]. If a wire mapping gap is intercepted, it queries the fallback parameters lookup block or falls back onto application presets (e.g., fallback rule maps targeting `StringLeft` length bounds) to guarantee stable compilation[cite: 3].
+* **Roslyn AST Signature Stripping:** Scans customized `FunctoidInstance` scripts using C# syntax nodes. It automatically isolates parameter value defaults (e.g., `= 5`) to inject into an internal fallback cache, sanitizes parameter data constraints (casting data boundaries from `int` to `double` safely for XSLT environments), and re-maps inputs with runtime inline variables to completely avoid data collision boundaries.
+* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins. If a wire mapping gap is intercepted, it queries the fallback parameters lookup block or falls back onto application presets (e.g., fallback rule maps targeting `StringLeft` length bounds) to guarantee stable compilation.
 
 ### 2. `ScriptCompilationEngine`
-An analytical isolation wrapper designed to instantly validate code blocks or evaluate script expressions on-the-fly without needing file compilation cycles[cite: 2].
+An analytical isolation wrapper designed to instantly validate code blocks or evaluate script expressions on-the-fly without needing file compilation cycles.
 
-* **Dynamic Roslyn Execution Pipeline:** Builds an internal class framework to house code blocks dynamically[cite: 2].
-* **Signature Mapping Layouts:** Converts explicit C# object elements into generic parameters to match expected array signature targets automatically[cite: 2].
-* **Reflection Engine Invocation:** Emits byte arrays directly inside application memory[cite: 2], uses reflection vectors to catch target entry points[cite: 2], and passes down parameters safely to isolate custom transformations while logging validation bugs directly back to user console boxes[cite: 2].
+* **Dynamic Roslyn Execution Pipeline:** Builds an internal class framework to house code blocks dynamically.
+* **Signature Mapping Layouts:** Converts explicit C# object elements into generic parameters to match expected array signature targets automatically.
+* **Reflection Engine Invocation:** Emits byte arrays directly inside application memory, uses reflection vectors to catch target entry points, and passes down parameters safely to isolate custom transformations while logging validation bugs directly back to user console boxes.
 * ## Data Model Dependencies
 
 The generation engine processes transformation paths by dynamically tracking data flows and mapping nodes across three core architectural data models:
 
-* **`FunctoidInstance`:** Represents a functional transformation node on the visual canvas[cite: 3]. It encapsulates custom script logic, baseline method metadata templates, input tracking properties, and tracking IDs[cite: 3].
-* **`MappingConnection`:** Represents the physical wire (edge) on the layout canvas connecting data endpoints[cite: 3]. It links a definite upstream `Source` item directly to a downstream target execution point[cite: 3].
-* **`ConnectionEndpoint`:** Represents individual socket interface blocks on schemas or functoid edges[cite: 3]. It defines structural boundary types (such as source schemas, functoid ports, or destination trees) and stores contextual navigation data paths like `NodePath`[cite: 3].
+* **`FunctoidInstance`:** Represents a functional transformation node on the visual canvas. It encapsulates custom script logic, baseline method metadata templates, input tracking properties, and tracking IDs.
+* **`MappingConnection`:** Represents the physical wire (edge) on the layout canvas connecting data endpoints. It links a definite upstream `Source` item directly to a downstream target execution point.
+* **`ConnectionEndpoint`:** Represents individual socket interface blocks on schemas or functoid edges. It defines structural boundary types (such as source schemas, functoid ports, or destination trees) and stores contextual navigation data paths like `NodePath`.
 
 
 # Data Mapper Workspace User Interface & Interaction Guide

@@ -148,12 +148,21 @@ namespace SkiaMapper {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
                 return null;
 
-            XmlDocument doc = new XmlDocument();
-            doc.Load(filePath);
+            string ext = Path.GetExtension(filePath).ToLower();
 
-            return doc.DocumentElement != null
-                ? BuildSchemaTreeFromXmlStatic(doc.DocumentElement)
-                : null;
+            // If it's a formal .xsd file, you could parse it via XmlSchema.
+            // If it's an XML instance file, generate the schema tree from its elements/attributes:
+            if (ext == ".xml" || ext == ".txt") {
+                XmlDocument doc = new XmlDocument();
+                doc.Load(filePath);
+
+                return doc.DocumentElement != null
+                    ? BuildSchemaTreeFromXmlStatic(doc.DocumentElement)
+                    : null;
+            }
+
+            // Add fallback or custom handling for other schema types if needed
+            return null;
         }
         private static SchemaNode BuildSchemaTreeFromXmlStatic(XmlElement xmlElement, int currentDepth = 0) {
             string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
