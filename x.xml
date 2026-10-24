@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="utf-16"?>
+<MappingProject xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" Version="1.0">
+  <ActiveFunctoids>
+    <FunctoidInstance>
+      <Id>7d140e8f-2135-443a-aa2e-58a3149d486d</Id>
+      <X>265</X>
+      <Y>96</Y>
+      <Width>110</Width>
+      <Height>36</Height>
+      <Definition Id="700" name="Database Lookup" catId="7" isVariable="false">
+        <MethodNameFormat>DatabaseLookup({0}, {1}, {2}, {3})</MethodNameFormat>
+        <JoinOperator />
+        <ScriptTemplate>
+   public string DatabaseLookup(string query,string lookupValue) {
+   string connectionString=@"Server=DESKTOP-H7BVMV9\\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   try {
+        using (var conn = new System.Data.SqlClient.SqlConnection(connectionString))
+        using (var cmd = new System.Data.SqlClient.SqlCommand(query, conn)) {
+            cmd.Parameters.Add(new System.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            conn.Open();
+            var result = cmd.ExecuteScalar();
+            return result != null ? result.ToString() : string.Empty;
+        }
+    }
+    catch (Exception ex) {
+        // Gracefully return empty string on connection failures, missing columns, or bad keys
+        return string.Empty;
+    }
+}
+      </ScriptTemplate>
+        <InputParametersCount>1</InputParametersCount>
+      </Definition>
+      <CustomScriptBody>public string DatabaseLookup(string lookupValue) {
+   string connectionString=@"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   
+try {
+        
+     using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+        
+     using (var cmd = new Microsoft.Data.SqlClient.SqlCommand("Select PartnerName from Partner where PartnerCode=@Param", conn)) {
+            
+           cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            conn.Open();
+            var result = cmd.ExecuteScalar();
+            return result != null ? result.ToString() : string.Empty;
+        }
+    }
+    catch (Exception ex) {
+        // Gracefully return empty string on connection failures, missing columns, or bad keys
+        return ex.Message;
+    }
+}</CustomScriptBody>
+      <CustomMethodName>DatabaseLookup</CustomMethodName>
+    </FunctoidInstance>
+    <FunctoidInstance>
+      <Id>cef951bf-f14c-4eac-a257-06588635ca80</Id>
+      <X>74</X>
+      <Y>122</Y>
+      <Width>110</Width>
+      <Height>36</Height>
+      <Definition Id="120" name="Trim" catId="1" isVariable="false">
+        <MethodNameFormat>{0}?.Trim()</MethodNameFormat>
+        <JoinOperator />
+        <ScriptTemplate>
+      public string Trim(string str) {
+          return str?.Trim() ?? string.Empty;
+      }
+      </ScriptTemplate>
+        <InputParametersCount>1</InputParametersCount>
+      </Definition>
+      <CustomScriptBody>public string Trim(string str) {
+          return str?.Trim() ?? string.Empty;
+      }</CustomScriptBody>
+      <CustomMethodName>Trim</CustomMethodName>
+    </FunctoidInstance>
+    <FunctoidInstance>
+      <Id>6b8a975a-d69b-46a7-ba0d-6c38c9ed7436</Id>
+      <X>248</X>
+      <Y>227</Y>
+      <Width>110</Width>
+      <Height>36</Height>
+      <Definition Id="700" name="Database Lookup" catId="7" isVariable="false">
+        <MethodNameFormat>DatabaseLookup({0}, {1}, {2}, {3})</MethodNameFormat>
+        <JoinOperator />
+        <ScriptTemplate>
+   public string DatabaseLookup(string query,string lookupValue) {
+   string connectionString=@"Server=DESKTOP-H7BVMV9\\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   try {
+        using (var conn = new System.Data.SqlClient.SqlConnection(connectionString))
+        using (var cmd = new System.Data.SqlClient.SqlCommand(query, conn)) {
+            cmd.Parameters.Add(new System.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            conn.Open();
+            var result = cmd.ExecuteScalar();
+            return result != null ? result.ToString() : string.Empty;
+        }
+    }
+    catch (Exception ex) {
+        // Gracefully return empty string on connection failures, missing columns, or bad keys
+        return string.Empty;
+    }
+}
+      </ScriptTemplate>
+        <InputParametersCount>1</InputParametersCount>
+      </Definition>
+      <CustomScriptBody>public string SelectLookup(string lookupValue) {
+   string connectionString = @"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   
+   try {
+        using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+        using (var cmd = new Microsoft.Data.SqlClient.SqlCommand("Select PartnerCode,PartnerName,ISA06,AddressLine1,AddressLine2,City,StateProvince,PostalCode,CountryCode from Partner where PartnerCode=@Param", conn)) {    
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            
+            // Fully qualify SqlDataAdapter under Microsoft.Data.SqlClient
+            using (var adapter = new Microsoft.Data.SqlClient.SqlDataAdapter(cmd)) {
+                 var dt = new DataTable("Rows");
+                 
+                 adapter.Fill(dt);
+
+                 // Serialize the DataTable to an XML string so XSLT can iterate over the rows
+                 using (var sw = new System.IO.StringWriter()) {
+                     dt.WriteXml(sw, XmlWriteMode.IgnoreSchema);
+                     return sw.ToString();
+                 }
+             }
+         }
+    }
+    catch (Exception ex) {
+        // Gracefully return error message or empty string on failure
+        return ex.Message;
+    }
+}</CustomScriptBody>
+      <CustomMethodName>SelectLookup</CustomMethodName>
+    </FunctoidInstance>
+  </ActiveFunctoids>
+  <Connections>
+    <MappingConnection>
+      <Id>daada4b0-5a09-4b71-8ec5-e4ab556f0ee2</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/ISA/ISA06</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>cef951bf-f14c-4eac-a257-06588635ca80</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>a0dc81ab-08dd-4277-a55c-c72f9e30f14c</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>7d140e8f-2135-443a-aa2e-58a3149d486d</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/billto/a1</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>6f5f3d29-57e4-47d7-aca7-4a281fc15597</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>cef951bf-f14c-4eac-a257-06588635ca80</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>7d140e8f-2135-443a-aa2e-58a3149d486d</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>ae71d31a-631b-4b62-a588-518ef75d0979</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>cef951bf-f14c-4eac-a257-06588635ca80</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/billto/a2</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>4b9438cb-8c76-4f8c-a544-8a7c90d48772</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/PO1</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>2caa6204-8f44-4de2-9ca6-b2c09d0465d1</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/PO1/PO101</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@id</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>eedceba0-a0e1-4dc4-899c-3adb05481f1c</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/PO1/PO103</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@qty</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>90020038-3ed8-40b4-9c8b-a9892343a692</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/PO1/PO104</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@uom</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>045d602e-59fd-431e-a671-2ecaa73d28a1</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/PO1/PO105</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@price</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>fd5d2fd9-476e-46af-82ec-e6b93bdcc661</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/Loop [PID]/PID/PID05/PID0501</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@description</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>aa696159-d263-4460-896a-98841a75896e</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/Loop [PID]/PID/PID01</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@pid</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>d0968336-96f1-46e1-a118-ff3fffd294ff</Id>
+      <Source>
+        <Type>SourceNode</Type>
+        <NodePath>Interchange/FunctionGroup/Transaction/Loop [PO1]/Loop [PID]/PID/PID02</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/lines/line/@pidq</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>ba01e007-5e4c-4750-bbc3-af813712a448</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>cef951bf-f14c-4eac-a257-06588635ca80</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>6b8a975a-d69b-46a7-ba0d-6c38c9ed7436</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+    <MappingConnection>
+      <Id>2b3f80b7-aeb8-4dbe-a553-19b67937685c</Id>
+      <Source>
+        <Type>Functoid</Type>
+        <NodePath />
+        <FunctoidInstanceId>6b8a975a-d69b-46a7-ba0d-6c38c9ed7436</FunctoidInstanceId>
+        <InputIndex>0</InputIndex>
+      </Source>
+      <Target>
+        <Type>DestinationNode</Type>
+        <NodePath>po/billto/postalCode</NodePath>
+        <FunctoidInstanceId xsi:nil="true" />
+        <InputIndex>0</InputIndex>
+      </Target>
+    </MappingConnection>
+  </Connections>
+</MappingProject>
