@@ -1719,16 +1719,29 @@ public class SkiaMapperControl : SKControl {
                         selectedConnection = null;
                         contextTargetInstance = null;
                         contextTargetConnection = null;
-                        if (Path.GetExtension(ofd.FileName).ToLower() != ".xml") {
-                            // attempt to parse to xml 
-                            X12Parser parser = new X12Parser();
-                            Stream reader = new FileStream(ofd.FileName, FileMode.Open, FileAccess.Read);
-                            List<Interchange> interchanges = parser.ParseMultiple(reader);
-                            string xml = interchanges.First().Serialize();
-                            ofd.FileName = Path.ChangeExtension(ofd.FileName, ".xml");
+                        switch (Path.GetExtension(ofd.FileName).ToLower()) {
+                            case ".edi":
+                            case ".txt": // Add any other non-xml raw EDI extensions you support here
+                                         // attempt to parse to xml 
+                                X12Parser parser = new X12Parser();
+                                using (Stream reader = new FileStream(ofd.FileName, FileMode.Open, FileAccess.Read)) {
+                                    List<Interchange> interchanges = parser.ParseMultiple(reader);
+                                    string xml = interchanges.First().Serialize();
+                                    ofd.FileName = Path.ChangeExtension(ofd.FileName, ".xml");
 
-                            System.IO.File.WriteAllText(ofd.FileName, xml);
-                            MainForm.SourcePath = ofd.FileName;
+                                    System.IO.File.WriteAllText(ofd.FileName, xml);
+                                    MainForm.SourcePath = ofd.FileName;
+                                }
+                                break;
+
+                            case ".xml":
+                            case ".xsd":
+                                // Already XML, handle accordingly or leave empty if no action needed
+                                break;
+
+                            default:
+                                // Handle unknown extensions or fallback logic if necessary
+                                break;
                         }
 
 

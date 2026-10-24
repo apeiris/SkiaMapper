@@ -8,6 +8,7 @@
 		<Category name="Conversion" Id="5" Color="Coral" />
 		<Category name="Scientific" Id="6" Color="SteelBlue" />
 		<Category name="DataBase" Id="7" Color="Goldenrod" />
+		<Category name="Advanced" Id="8" Color="SlateGray" />
 	</Categories>
 
 	<Functoid name="Concatenate" catId="1" Id="100" >
@@ -112,7 +113,8 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
-	<Functoid name="To Age" catId="4" Id="310" >
+
+	<Functoid name="To Age" catId="4" Id="320" >
 		<MethodNameFormat>DateTime.Now.ToString("yyyy-MM-dd")</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
@@ -139,34 +141,39 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
-	<!---Database-->
+
+	<!-- Database -->
 	<Functoid name="Database Lookup" catId="7" Id="700" >
 		<MethodNameFormat>DatabaseLookup({0}, {1}, {2}, {3})</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
-      public string DatabaseLookup(string lookupValue, string connectionString, string tableName, string columnName) {
-          if (string.IsNullOrEmpty(lookupValue) || string.IsNullOrEmpty(connectionString)) return string.Empty;
-          if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(columnName)) return string.Empty;
+   public string DatabaseLookup(string query,string lookupValue) {
+   string connectionString=@"Server=DESKTOP-H7BVMV9\\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   try {
+        using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+        using (var cmd = new Microsoft.Data.SqlClient.SqlCommand(query, conn)) {
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            conn.Open();
+            var result = cmd.ExecuteScalar();
+            return result != null ? result.ToString() : string.Empty;
+        }
+    }
+    catch (Exception ex) {
+        // Gracefully return empty string on connection failures, missing columns, or bad keys
+        return string.Empty;
+    }
+}
+      ]]>
+		</ScriptTemplate>
+	</Functoid>
 
-          // Clean names to prevent dynamic SQL structural injection issues
-          string cleanTable = System.Text.RegularExpressions.Regex.Replace(tableName, @"[^A-Za-z0-9_]", "");
-          string cleanColumn = System.Text.RegularExpressions.Regex.Replace(columnName, @"[^A-Za-z0-9_]", "");
-
-          string query = $"SELECT [{cleanColumn}] FROM [{cleanTable}] WHERE [Id] = @Param";
-
-          try {
-              using (var conn = new System.Data.SqlClient.SqlConnection(connectionString))
-              using (var cmd = new System.Data.SqlClient.SqlCommand(query, conn)) {
-                  cmd.Parameters.Add(new System.Data.SqlClient.SqlParameter("@Param", lookupValue));
-                  conn.Open();
-                  var result = cmd.ExecuteScalar();
-                  return result != null ? result.ToString() : string.Empty;
-              }
-          }
-          catch (Exception ex) {
-              // Gracefully return empty string on connection failures, missing columns, or bad keys
-              return string.Empty;
-          }
+	<!-- Advanced / Looping -->
+	<Functoid name="Looping" catId="8" Id="800">
+		<MethodNameFormat>Looping({0})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+      public string Looping(string loopPath) {
+          return loopPath ?? string.Empty;
       }
       ]]>
 		</ScriptTemplate>

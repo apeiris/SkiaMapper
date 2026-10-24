@@ -19,10 +19,8 @@ namespace SkiaMapper.Services {
     public class XsltMapGenerator {
         private readonly ObservableCollection<FunctoidInstance> _activeFunctoids;
         private readonly ObservableCollection<MappingConnection> _connections;
-
         // Tracks dynamic fallback parameters globally indexed by [FunctoidInstanceId -> [ParamSlotIndex -> StringLiteralValue]]
         private readonly Dictionary<Guid, Dictionary<int, string>> _instanceFallbackParameterCache;
-
         public XsltMapGenerator(
             ObservableCollection<FunctoidInstance> activeFunctoids,
             ObservableCollection<MappingConnection> connections) {
@@ -30,7 +28,6 @@ namespace SkiaMapper.Services {
             _connections = connections ?? throw new ArgumentNullException(nameof(connections));
             _instanceFallbackParameterCache = new Dictionary<Guid, Dictionary<int, string>>();
         }
-
         public void GenerateAndSaveMap() {
             if (_connections.Count == 0) {
                 MessageBox.Show("The workspace canvas contains no connections to compile.", "XSLT Engine Notice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -46,11 +43,12 @@ namespace SkiaMapper.Services {
                 MessageBox.Show($"XSLT generation failed:\n{ex.Message}", "Pipeline Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
         public object BuildDynamicExtensionObject() {
             var codeBuilder = new StringBuilder();
             codeBuilder.AppendLine("using System;");
             codeBuilder.AppendLine("using System.Linq;");
+            codeBuilder.AppendLine("using System.Data;");
+            codeBuilder.AppendLine("using Microsoft.Data.SqlClient;");
             codeBuilder.AppendLine("namespace SkiaMapper.Dynamic {");
             codeBuilder.AppendLine("    public class FunctoidExtension {");
 
@@ -85,7 +83,6 @@ namespace SkiaMapper.Services {
                 if (!string.IsNullOrWhiteSpace(functoid.CustomScriptBody)) {
                     script = functoid.CustomScriptBody.Trim();
                 } else {
-                    // Generate a clean default method body matching the parameter count
                     var paramList = string.Join(", ", Enumerable.Range(0, Math.Max(1, paramCount)).Select(i => $"object p{i}"));
                     script = $"public static string {methodName}({paramList}) {{ return p0?.ToString() ?? \"\"; }}";
                 }
@@ -104,12 +101,14 @@ namespace SkiaMapper.Services {
             SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(codeBuilder.ToString());
 
             var references = new MetadataReference[]
-            {
-                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-                MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location),
-                MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location)
-            };
-
+             {
+        MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+        MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location),
+        MetadataReference.CreateFromFile(typeof(System.Data.DataRow).Assembly.Location),
+        MetadataReference.CreateFromFile(typeof(Microsoft.Data.SqlClient.SqlConnection).Assembly.Location),
+        MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
+        MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.Primitives").Location)
+             };
             var compilation = CSharpCompilation.Create(
                 $"FunctoidAssembly_{Guid.NewGuid():N}",
                 new[] { syntaxTree },
@@ -162,7 +161,6 @@ namespace SkiaMapper.Services {
             return Activator.CreateInstance(type)!;
         }
 
-
         private string CompileXsltPayload() {
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
@@ -213,12 +211,36 @@ namespace SkiaMapper.Services {
                     }
                     currentNode = child;
                 }
-                currentNode.ValueExpression = TraceSourceEndpoint(connection.Source, out bool isFunctoidCall);
+
+                string sourceExpr = TraceSourceEndpoint(connection.Source, out bool isFunctoidCall);
+                currentNode.ValueExpression = sourceExpr;
+
+                // --- DYNAMIC CONTAINER LOOP DETECTION ---
+                if (path.Contains("line") || path.Contains("Line") || path.Contains("Loop") || sourceExpr.Contains("Loop")) {
+                    string rawPath = sourceExpr;
+                    if (connection.Source?.Type == ConnectionEndpointType.Functoid) {
+                        var srcFunctoid = _activeFunctoids.FirstOrDefault(f => f.Id == connection.Source.FunctoidInstanceId);
+                        if (srcFunctoid != null && srcFunctoid.Definition?.Name == "Looping") {
+                            rawPath = GetLoopingFunctoidRawPath(srcFunctoid.Id);
+                        }
+                    }
+
+                    // Dynamically anchor to the parent Loop container if the path terminates in a child segment
+                    if (!string.IsNullOrEmpty(rawPath)) {
+                        if (!rawPath.Contains("Loop[@LoopId") || rawPath.EndsWith("/PO1") || rawPath.EndsWith("/HL") || rawPath.EndsWith("/CTT")) {
+                            int lastSlashIndex = rawPath.LastIndexOf('/');
+                            if (lastSlashIndex > 0) {
+                                rawPath = rawPath.Substring(0, lastSlashIndex);
+                            }
+                        }
+                        currentNode.LoopSourcePath = rawPath;
+                    }
+                }
             }
 
             // Recursively render the nested XML structure into the XSLT template
             foreach (var child in rootNode.Children.Values) {
-                RenderNodeRecursive(child, sb, 2);
+                RenderNodeRecursive(child, sb, 2, null);
             }
 
             sb.AppendLine("  </xsl:template>");
@@ -226,36 +248,94 @@ namespace SkiaMapper.Services {
 
             return sb.ToString();
         }
+        private string GetLoopingFunctoidRawPath(Guid functoidId) {
+            // Find the wire plugging into input slot 0 of this Looping functoid
+            var incomingWire = _connections.FirstOrDefault(c =>
+                c.Target?.Type == ConnectionEndpointType.Functoid &&
+                c.Target.FunctoidInstanceId == functoidId &&
+                c.Target.InputIndex == 0);
 
-        private class XsltTreeNode {
-            public string Name { get; set; } = "";
-            public bool IsAttribute { get; set; } = false; // <--- Added flag
-            public Dictionary<string, XsltTreeNode> Children { get; } = new Dictionary<string, XsltTreeNode>();
-            public string? ValueExpression { get; set; }
+            if (incomingWire?.Source != null) {
+                if (incomingWire.Source.Type == ConnectionEndpointType.SourceNode && !string.IsNullOrEmpty(incomingWire.Source.NodePath)) {
+                    return $"//{ToValidXPath(incomingWire.Source.NodePath)}";
+                }
+            }
+            return string.Empty;
         }
 
-        private void RenderNodeRecursive(XsltTreeNode node, StringBuilder sb, int indentLevel) {
+      
+        private string ExtractGenericLoopExpression(string sourceExpr) {
+            if (string.IsNullOrEmpty(sourceExpr)) return string.Empty;
+
+            // If the expression points to a loop containing [@LoopId='...'], 
+            // truncate at the closing bracket to isolate the collection selector (e.g., //Loop[@LoopId='PO1'])
+            int bracketIndex = sourceExpr.IndexOf("]");
+            if (bracketIndex > 0) {
+                return sourceExpr.Substring(0, bracketIndex + 1);
+            }
+
+            // Fallback: strip the leaf segment if it's a standard path
+            int lastSlash = sourceExpr.LastIndexOf('/');
+            if (lastSlash > 0) {
+                return sourceExpr.Substring(0, lastSlash);
+            }
+
+            return sourceExpr;
+        }
+        private string ExtractParentLoopExpression(string sourceExpr) {
+            // If the source expression targets a specific field inside a loop (e.g. //Loop[@LoopId='PO1']/PO1/PO101),
+            // strip the leaf segment to get the repeating container query (e.g. //Loop[@LoopId='PO1'])
+            int lastSlash = sourceExpr.LastIndexOf('/');
+            if (lastSlash > 0 && !sourceExpr.EndsWith("]")) {
+                return sourceExpr.Substring(0, lastSlash);
+            }
+            return sourceExpr;
+        }
+        private void RenderNodeRecursive(XsltTreeNode node, StringBuilder sb, int indentLevel, string activeLoopPath = null) {
             string indent = new string(' ', indentLevel * 2);
 
+            // Check if this node introduces a new loop
+            bool hasLoop = !string.IsNullOrEmpty(node.LoopSourcePath);
+            string currentLoopPath = hasLoop ? node.LoopSourcePath : activeLoopPath;
+
             if (node.IsAttribute) {
-                // Strip the '@' character for the attribute name (e.g. "@id" -> "id")
                 string attrName = node.Name.TrimStart('@');
                 sb.AppendLine($"{indent}<xsl:attribute name=\"{attrName}\">");
                 if (!string.IsNullOrEmpty(node.ValueExpression)) {
-                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{node.ValueExpression}\" />");
+                    string expr = node.ValueExpression;
+                    if (!string.IsNullOrEmpty(activeLoopPath)) {
+                        string prefix = activeLoopPath.TrimEnd('/') + "/";
+                        if (expr.StartsWith(prefix)) {
+                            expr = expr.Substring(prefix.Length);
+                        }
+                    }
+                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{expr}\" />");
                 }
                 sb.AppendLine($"{indent}</xsl:attribute>");
                 return;
             }
 
-            // Separate attributes from element children so attributes render first inside the element tag
+            // --- BIZTALK-STYLE <xsl:for-each> RENDERING ---
+            if (hasLoop) {
+                sb.AppendLine($"{indent}<xsl:for-each select=\"{node.LoopSourcePath}\">");
+                indentLevel++;
+                indent = new string(' ', indentLevel * 2);
+            }
+
             var attributeChildren = node.Children.Values.Where(c => c.IsAttribute).ToList();
             var elementChildren = node.Children.Values.Where(c => !c.IsAttribute).ToList();
 
             if (elementChildren.Count == 0 && attributeChildren.Count == 0) {
                 if (!string.IsNullOrEmpty(node.ValueExpression)) {
+                    string expr = node.ValueExpression;
+                    if (!string.IsNullOrEmpty(currentLoopPath)) {
+                        string prefix = currentLoopPath.TrimEnd('/') + "/";
+                        if (expr.StartsWith(prefix)) {
+                            expr = expr.Substring(prefix.Length);
+                        }
+                    }
                     sb.AppendLine($"{indent}<{node.Name}>");
-                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{node.ValueExpression}\" />");
+                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{expr}\" />");
                     sb.AppendLine($"{indent}</{node.Name}>");
                 } else {
                     sb.AppendLine($"{indent}<{node.Name}/>");
@@ -263,21 +343,30 @@ namespace SkiaMapper.Services {
             } else {
                 sb.AppendLine($"{indent}<{node.Name}>");
 
-                // Render attributes first
                 foreach (var attrChild in attributeChildren) {
-                    RenderNodeRecursive(attrChild, sb, indentLevel + 1);
+                    RenderNodeRecursive(attrChild, sb, indentLevel + 1, currentLoopPath);
                 }
 
-                // Render sub-elements next
                 foreach (var elemChild in elementChildren) {
-                    RenderNodeRecursive(elemChild, sb, indentLevel + 1);
+                    RenderNodeRecursive(elemChild, sb, indentLevel + 1, currentLoopPath);
                 }
 
                 sb.AppendLine($"{indent}</{node.Name}>");
             }
+
+            if (hasLoop) {
+                indentLevel--;
+                indent = new string(' ', indentLevel * 2);
+                sb.AppendLine($"{indent}</xsl:for-each>");
+            }
         }
-
-
+        private class XsltTreeNode {
+            public string Name { get; set; } = "";
+            public bool IsAttribute { get; set; } = false;
+            public Dictionary<string, XsltTreeNode> Children { get; } = new Dictionary<string, XsltTreeNode>();
+            public string? ValueExpression { get; set; }
+            public string? LoopSourcePath { get; set; } // <--- Added for BizTalk-style looping
+        }
         /// <summary>
         /// Recursively walks the canvas graph topology backward to compile properly formatted 
         /// nested function arguments, accounting for literal parameter fallbacks and missing connection slots.
@@ -309,7 +398,9 @@ namespace SkiaMapper.Services {
 
                     if (matchingWire != null && matchingWire.Source != null) {
                         if (matchingWire.Source.Type == ConnectionEndpointType.SourceNode) {
-                            argumentExpressions.Add($"string(//{matchingWire.Source.NodePath})");
+                            // --- SANITIZED HERE ---
+                            string cleanPath = ToValidXPath(matchingWire.Source.NodePath);
+                            argumentExpressions.Add($"string(//{cleanPath})");
                         } else if (matchingWire.Source.Type == ConnectionEndpointType.Functoid) {
                             string nestedCall = TraceSourceEndpoint(matchingWire.Source, out bool innerIsFunctoid);
                             argumentExpressions.Add(innerIsFunctoid || nestedCall.StartsWith("user:")
@@ -339,12 +430,66 @@ namespace SkiaMapper.Services {
             }
 
             if (source.Type == ConnectionEndpointType.SourceNode && !string.IsNullOrEmpty(source.NodePath)) {
-                return $"//{source.NodePath}";
+                // --- SANITIZED HERE ---
+                string cleanPath = ToValidXPath(source.NodePath);
+                return $"//{cleanPath}";
             }
 
             return string.Empty;
         }
+        private string ToValidXPath(string rawPath) {
+            if (string.IsNullOrEmpty(rawPath)) return string.Empty;
 
-     
+            // If the path uses the UI display format like "Loop [PO1]", convert it to valid XPath.
+            // e.g., "Loop [PO1]" -> "Loop[@LoopId='PO1']" or "Loop_PO1" depending on your XML structure.
+            if (rawPath.Contains("Loop [") && rawPath.EndsWith("]")) {
+                int startIdx = rawPath.IndexOf("[") + 1;
+                int len = rawPath.Length - 1 - startIdx;
+                string loopId = rawPath.Substring(startIdx, len).Trim();
+
+                // Find the base segment before "Loop ["
+                string basePart = rawPath.Substring(0, rawPath.IndexOf("Loop [")).TrimEnd('/');
+                return $"{basePart}/Loop[@LoopId='{loopId}']";
+            }
+
+            // General cleanup for any remaining spaces in node segments
+            var segments = rawPath.Split('/');
+            for (int i = 0; i < segments.Length; i++) {
+                if (segments[i].Contains(" [") && segments[i].EndsWith("]")) {
+                    // Convert custom display names safely
+                    segments[i] = segments[i].Replace(" [", "[@LoopId='").Replace("]", "']");
+                } else {
+                    segments[i] = segments[i].Replace(" ", "_");
+                }
+            }
+            return string.Join("/", segments);
+        }
+
+        private string DetectCommonLoopPath(List<string> sourceExpressions) {
+            if (sourceExpressions == null || sourceExpressions.Count == 0) return null;
+
+            // Split all source paths into segments
+            var pathSegmentsList = sourceExpressions
+                .Select(e => e.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries))
+                .ToList();
+
+            // Find the longest common prefix that contains a Loop container
+            string commonLoop = null;
+            var firstPathSegments = pathSegmentsList[0];
+
+            for (int i = 0; i < firstPathSegments.Length; i++) {
+                string candidatePath = "//" + string.Join("/", firstPathSegments.Take(i + 1));
+
+                // Check if this candidate is a parent prefix for all source paths
+                bool isCommonToAll = pathSegmentsList.All(segments =>
+                    string.Join("/", segments).StartsWith(string.Join("/", firstPathSegments.Take(i + 1))));
+
+                if (isCommonToAll && candidatePath.Contains("Loop")) {
+                    commonLoop = candidatePath;
+                }
+            }
+
+            return commonLoop;
+        }
     }
 }

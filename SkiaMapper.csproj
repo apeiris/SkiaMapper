@@ -11,6 +11,7 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
+		<PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
 		<PackageReference Include="OopFactory.X12" Version="3.0.8.1" />
 		<PackageReference Include="SkiaSharp" Version="3.119.4" />
 		<PackageReference Include="SkiaSharp.Views.WindowsForms" Version="3.119.4" />
@@ -20,7 +21,10 @@
 		<None Update="850_POMultiline.xml">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="BuiltInFunctoids.xml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
+		<None Update="850_POMultiline.xsd">
+		  <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+		<None Update="BuiltInFunctoids.xml"><CopyToOutputDirectory>Always</CopyToOutputDirectory></None>
 		<None Update="DestinationUser.xml"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></None>
 		<None Update="outputSchema.xml">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
