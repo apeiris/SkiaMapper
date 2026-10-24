@@ -107,7 +107,10 @@ namespace SkiaMapper.Services {
         MetadataReference.CreateFromFile(typeof(System.Data.DataRow).Assembly.Location),
         MetadataReference.CreateFromFile(typeof(Microsoft.Data.SqlClient.SqlConnection).Assembly.Location),
         MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
-        MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.Primitives").Location)
+        MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.Primitives").Location),
+        MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.TypeConverter").Location), // Required for DataTable components
+        MetadataReference.CreateFromFile(Assembly.Load("System.Xml.ReaderWriter").Location), // Required for dt.WriteXml / XmlWriter
+        MetadataReference.CreateFromFile(Assembly.Load("System.Private.Xml").Location) // Required for DataTable serialization XML writing
              };
             var compilation = CSharpCompilation.Create(
                 $"FunctoidAssembly_{Guid.NewGuid():N}",
@@ -334,8 +337,13 @@ namespace SkiaMapper.Services {
                             expr = expr.Substring(prefix.Length);
                         }
                     }
+
+                    // Automatically enable disable-output-escaping for function/lookup calls returning XML strings
+                    bool isFunctionCall = expr.Contains("(");
+                    string doeAttr = isFunctionCall ? " disable-output-escaping=\"yes\"" : "";
+
                     sb.AppendLine($"{indent}<{node.Name}>");
-                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{expr}\" />");
+                    sb.AppendLine($"{indent}  <xsl:value-of select=\"{expr}\"{doeAttr} />");
                     sb.AppendLine($"{indent}</{node.Name}>");
                 } else {
                     sb.AppendLine($"{indent}<{node.Name}/>");
