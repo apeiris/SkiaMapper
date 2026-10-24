@@ -3,8 +3,10 @@ using SkiaMapper.Models;
 using System;
 using System.ComponentModel;
 using System.IO;
+using System.Text.Json;
 using System.Windows.Forms;
 using System.Xml;
+using System.Xml.Schema;
 using System.Xml.Serialization;
 namespace SkiaMapper {
     public partial class MainForm : Form {
@@ -66,9 +68,10 @@ namespace SkiaMapper {
             if (LicenseManager.UsageMode == LicenseUsageMode.Designtime || DesignMode) {
                 return;
             }
-            string defaultSource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "850_POMultiline.xml");
-            string defaultDest = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "outputSchema.xml");
-            string defaultXslt = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Transform.xslt");
+            string path = AppDomain.CurrentDomain.BaseDirectory;
+            string defaultSource = Path.Combine(path, "850_POMultiline.xml");
+            string defaultDest = Path.Combine(path, "outputSchema.xml");
+            string defaultXslt = Path.Combine(path, "Transform.xslt");
             if (string.IsNullOrEmpty(RepositorySourcePath)) RepositorySourcePath = defaultSource;
             if (string.IsNullOrEmpty(RepositoryDestinationPath)) RepositoryDestinationPath = defaultDest;
             if (string.IsNullOrEmpty(XsltPath)) XsltPath = defaultXslt;
@@ -148,59 +151,145 @@ namespace SkiaMapper {
             if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
                 return null;
 
-            string ext = Path.GetExtension(filePath).ToLower();
-
-            // If it's a formal .xsd file, you could parse it via XmlSchema.
-            // If it's an XML instance file, generate the schema tree from its elements/attributes:
-            if (ext == ".xml" || ext == ".txt") {
+            try {
                 XmlDocument doc = new XmlDocument();
                 doc.Load(filePath);
 
-                return doc.DocumentElement != null
-                    ? BuildSchemaTreeFromXmlStatic(doc.DocumentElement)
-                    : null;
-            }
+                if (doc.DocumentElement == null) return null;
 
-            // Add fallback or custom handling for other schema types if needed
+                // Check if the file is a formal W3C XSD schema vs. an XML instance
+                bool isXsdSchema = doc.DocumentElement.LocalName == "schema" ||
+                                   doc.DocumentElement.NamespaceURI == "http://www.w3.org/2001/XMLSchema";
+
+                if (isXsdSchema) {
+                    return LoadSchemaFromXsd(filePath);
+                } else {
+                    // Programmatically convert XML instance into SchemaNode tree
+                    string xsdFile = Path.ChangeExtension(filePath, ".xsd");
+                    SchemaNode xsdNode = BuildSchemaTreeFromXmlStatic(doc.DocumentElement, 0);
+
+                    SchemaNodeToXsdExporter.ExportSchemaNodeToXsd(xsdNode, xsdFile);
+
+                    return xsdNode;
+                }
+            } catch (Exception ex) {
+                ErrorHelper.HandleException(ex, $"Failed to parse schema from file:\n{ex.Message}");
+                return null;
+            }
+        }
+
+
+   
+        private static SchemaNode? LoadSchemaFromXsd(string xsdPath) {
+            try {
+                using (FileStream fs = new FileStream(xsdPath, FileMode.Open, FileAccess.Read)) {
+                    XmlSchema schema = XmlSchema.Read(fs, null);
+                    if (schema == null) return null;
+
+                    // CRITICAL: Compile the schema to resolve named types (ISAType, FunctionGroupType, etc.)
+                    schema.Compile(null);
+
+                    // Find the root element in the schema items
+                    foreach (XmlSchemaObject item in schema.Items) {
+                        if (item is XmlSchemaElement element) {
+                            return BuildSchemaNodeFromXsdElement(element, 0);
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                //  MessageBox.Show($"Failed to parse XSD file:\n{ex.Message}", "XSD Parse Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                ErrorHelper.HandleException(ex, "Failed to parse xsd file");
+
+            }
             return null;
         }
-        private static SchemaNode BuildSchemaTreeFromXmlStatic(XmlElement xmlElement, int currentDepth = 0) {
-            string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
-                ? xmlElement.LocalName
-                : $"{xmlElement.Prefix}:{xmlElement.LocalName}";
+        private static SchemaNode BuildSchemaNodeFromXsdElement(XmlSchemaElement element, int currentDepth) {
+            string nodeName = element.Name ?? element.QualifiedName.Name;
 
             SchemaNode treeNode = new SchemaNode {
-                Name = nodeDisplayName,
+                Name = nodeName,
                 IsAttribute = false,
                 IsExpanded = true,
                 Depth = currentDepth
             };
 
-            if (xmlElement.Attributes != null) {
-                foreach (XmlAttribute attr in xmlElement.Attributes) {
-                    if (attr.Prefix == "xmlns" || attr.LocalName == "xmlns") continue;
-
-                    string attrDisplayName = string.IsNullOrEmpty(attr.Prefix)
-                        ? $"@{attr.LocalName}"
-                        : $"@{attr.Prefix}:{attr.LocalName}";
-
-                    treeNode.Children.Add(new SchemaNode {
-                        Name = attrDisplayName,
-                        IsAttribute = true,
-                        IsExpanded = false,
-                        Depth = currentDepth + 1
-                    });
+            if (element.ElementSchemaType is XmlSchemaComplexType complexType) {
+                // Extract attributes
+                if (complexType.AttributeUses != null) {
+                    foreach (XmlSchemaAttribute attr in complexType.AttributeUses.Values) {
+                        string attrName = attr.Name ?? attr.QualifiedName.Name;
+                        treeNode.Children.Add(new SchemaNode {
+                            Name = $"@{attrName}",
+                            IsAttribute = true,
+                            IsExpanded = false,
+                            Depth = currentDepth + 1
+                        });
+                    }
                 }
-            }
 
-            foreach (XmlNode childXml in xmlElement.ChildNodes) {
-                if (childXml is XmlElement childElement) {
-                    SchemaNode childTreeNode = BuildSchemaTreeFromXmlStatic(childElement, currentDepth + 1);
-                    treeNode.Children.Add(childTreeNode);
+                // Extract child elements from content particles (sequences, choices, etc.)
+                if (complexType.ContentTypeParticle is XmlSchemaParticle particle) {
+                    ProcessXsdParticle(particle, treeNode, currentDepth + 1);
                 }
             }
 
             return treeNode;
+        }
+        private static void ProcessXsdParticle(XmlSchemaParticle particle, SchemaNode parentNode, int currentDepth) {
+            if (particle is XmlSchemaGroupBase groupBase) {
+                foreach (XmlSchemaObject item in groupBase.Items) {
+                    if (item is XmlSchemaElement childElement) {
+                        parentNode.Children.Add(BuildSchemaNodeFromXsdElement(childElement, currentDepth));
+                    } else if (item is XmlSchemaParticle nestedParticle) {
+                        ProcessXsdParticle(nestedParticle, parentNode, currentDepth);
+                    }
+                }
+            }
+        }
+        public static SchemaNode BuildSchemaTreeFromXmlStatic(XmlElement element, int depth = 0) {
+            // If it's a generic container like <Loop>, append its LoopId for clear visibility in the UI tree
+            string displayName = element.Name;
+            string loopId = element.GetAttribute("LoopId");
+            if (!string.IsNullOrEmpty(loopId)) {
+                displayName = $"Loop [{loopId}]";
+            }
+
+            SchemaNode node = new SchemaNode {
+                Name = displayName,
+                IsAttribute = false,
+                IsExpanded = true,
+                Depth = depth
+            };
+
+            // 1. Extract XML Attributes (including LoopId, Name, segment-terminator, etc.)
+            foreach (XmlAttribute attr in element.Attributes) {
+                node.Children.Add(new SchemaNode {
+                    Name = $"@{attr.Name}",
+                    IsAttribute = true,
+                    IsExpanded = false,
+                    Depth = depth + 1
+                });
+            }
+
+            // 2. Track unique child signatures using both tag name and LoopId
+            HashSet<string> processedChildSignatures = new HashSet<string>();
+
+            foreach (XmlNode childNode in element.ChildNodes) {
+                if (childNode is XmlElement childElement) {
+                    string childName = childElement.Name;
+                    string childLoopId = childElement.GetAttribute("LoopId");
+
+                    // Create a unique signature so <Loop LoopId="N1"> and <Loop LoopId="PO1"> are treated as distinct nodes
+                    string signature = string.IsNullOrEmpty(childLoopId) ? childName : $"{childName}_{childLoopId}";
+
+                    if (!processedChildSignatures.Contains(signature)) {
+                        processedChildSignatures.Add(signature);
+                        node.Children.Add(BuildSchemaTreeFromXmlStatic(childElement, depth + 1));
+                    }
+                }
+            }
+
+            return node;
         }
         private SchemaNode BuildSchemaTreeFromXml(XmlElement xmlElement, int currentDepth = 0) {
             string nodeDisplayName = string.IsNullOrEmpty(xmlElement.Prefix)
@@ -266,6 +355,32 @@ namespace SkiaMapper {
                                         <Ten_Into_Three></Ten_Into_Three>
                                         </ns0:DestinationUser>";
                 File.WriteAllText(destPath, rawDestXml);
+            }
+        }
+
+
+        public static class SchemaStorageHelper {
+            // Save the SchemaNode tree to a JSON file
+            public static void SaveSchemaToFile(SchemaNode rootNode, string filePath) {
+                var options = new JsonSerializerOptions {
+                    WriteIndented = true, // Makes the saved file human-readable
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+
+                string jsonString = JsonSerializer.Serialize(rootNode, options);
+                File.WriteAllText(filePath, jsonString);
+            }
+
+            // Load the SchemaNode tree back from a JSON file
+            public static SchemaNode? LoadSavedSchema(string filePath) {
+                if (!File.Exists(filePath)) return null;
+
+                string jsonString = File.ReadAllText(filePath);
+                var options = new JsonSerializerOptions {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                return JsonSerializer.Deserialize<SchemaNode>(jsonString, options);
             }
         }
     }
