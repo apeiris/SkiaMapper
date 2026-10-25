@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<po>
+	<billto>
+		<a1>WOLESELY</a1>
+		<a2>SENDER_ID</a2>
+	</billto>
+	<lines>
+		<line id="1" qty="EA" uom="15.50" price="" description="WIDGET MODEL A" pid="F" pidq="" />
+		<line id="2" qty="EA" uom="22.00" price="" description="WIDGET MODEL B" pid="F" pidq="" />
+		<line id="3" qty="EA" uom="45.00" price="" description="WIDGET MODEL C" pid="F" pidq="" />
+	</lines>
+	<DeliverTo>
+		<PartnerCode>SENDER_ID</PartnerCode>
+		<PartnerName>WOLESELY</PartnerName>
+		<ISA06>SENDER_ID</ISA06>
+		<AddressLine1>2905</AddressLine1>
+		<AddressLine2>21, ICEBOAT TERRACE</AddressLine2>
+		<City>Toronto</City>
+		<StateProvince>ON</StateProvince>
+		<PostalCode>M9V4A9</PostalCode>
+		<CountryCode>CA</CountryCode>
+	</DeliverTo>
+</po>

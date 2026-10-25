@@ -166,6 +166,48 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
+	
+	<Functoid name="Select Xml" catId="7" Id="710" >
+		<MethodNameFormat>SelectXml({0}, {1}, {2}, {3})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+  public string SelectXml(string lookupValue) {
+   string connectionString = @"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   
+   try {
+        using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+        using (var cmd = new Microsoft.Data.SqlClient.SqlCommand("Select PartnerCode,PartnerName,ISA06,AddressLine1,AddressLine2,City,StateProvince,PostalCode,CountryCode from Partner where PartnerCode=@Param", conn)) {    
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            
+            using (var adapter = new Microsoft.Data.SqlClient.SqlDataAdapter(cmd)) {
+                 var dt = new DataTable("Rows");
+                 adapter.Fill(dt);
+
+                 // Serialize the DataTable to an XML string
+                 using (var sw = new System.IO.StringWriter()) {
+                     dt.WriteXml(sw, XmlWriteMode.IgnoreSchema);
+                     string xml = sw.ToString();
+                     
+                     // Strip out both <DocumentElement> and <Rows> wrappers
+                     xml = xml.Replace("<DocumentElement>", "")
+                              .Replace("</DocumentElement>", "")
+                              .Replace("<Rows>", "")
+                              .Replace("</Rows>", "")
+                              .Trim();
+                              
+                     return xml;
+                 }
+             }
+         }
+    }
+    catch (Exception ex) {
+        // Gracefully return error message or empty string on failure
+        return ex.Message;
+    }
+}
+      ]]>
+		</ScriptTemplate>
+	</Functoid>
 
 	<!-- Advanced / Looping -->
 	<Functoid name="Looping" catId="8" Id="800">
