@@ -1,0 +1,104 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<po>
+  <transaction typeId="00" x12="          " senderId="925485US00     " />
+  <lines>
+    <line>
+          
+          5
+          
+          72
+          
+          EA
+          
+          7.5
+          
+          TE
+          
+          CB
+          
+          065374-118
+          
+          PR
+          
+          RO
+          
+          VN
+          
+          RV0524
+        </line>
+    <line>
+          
+          6
+          
+          696
+          
+          EA
+          
+          9.55
+          
+          TE
+          
+          CB
+          
+          067504-118
+          
+          PR
+          
+          RO
+          
+          VN
+          
+          DX1875
+        </line>
+  </lines>
+  <lines>
+    <line>
+          
+          5
+          
+          72
+          
+          EA
+          
+          7.5
+          
+          TE
+          
+          CB
+          
+          065374-118
+          
+          PR
+          
+          RO
+          
+          VN
+          
+          RV0524
+        </line>
+    <line>
+          
+          6
+          
+          696
+          
+          EA
+          
+          9.55
+          
+          TE
+          
+          CB
+          
+          067504-118
+          
+          PR
+          
+          RO
+          
+          VN
+          
+          DX1875
+        </line>
+  </lines>
+</po>

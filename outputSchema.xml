@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <po>
-	<transaction typeId="xx" x12="xxx" senderId="" receiverId=""/>
+	<transaction typeId="xx" x12="xxx" senderId="" receiverId="" PoNumber="" PODate=""/>
 	<billto>
 		<a1></a1>
 		<a2></a2>

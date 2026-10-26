@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<xs:schema elementFormDefault="qualified" id="GeneratedFromSchemaNode" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="po">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="transaction">
+          <xs:complexType>
+            <xs:attribute name="typeId" type="xs:string" />
+            <xs:attribute name="x12" type="xs:string" />
+            <xs:attribute name="senderId" type="xs:string" />
+            <xs:attribute name="receiverId" type="xs:string" />
+            <xs:attribute name="PoNumber" type="xs:string" />
+            <xs:attribute name="PODate" type="xs:string" />
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="billto">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="a1" type="xs:string" />
+              <xs:element name="a2" type="xs:string" />
+              <xs:element name="postalCode" type="xs:string" />
+              <xs:element name="City" type="xs:string" />
+              <xs:element name="Country" type="xs:string" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="DeliverTo">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="a1" type="xs:string" />
+              <xs:element name="a2" type="xs:string" />
+              <xs:element name="postalCode" type="xs:string" />
+              <xs:element name="City" type="xs:string" />
+              <xs:element name="Country" type="xs:string" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="lines">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="line">
+                <xs:complexType>
+                  <xs:attribute name="id" type="xs:string" />
+                  <xs:attribute name="qty" type="xs:string" />
+                  <xs:attribute name="uom" type="xs:string" />
+                  <xs:attribute name="price" type="xs:string" />
+                  <xs:attribute name="pidq" type="xs:string" />
+                  <xs:attribute name="pid" type="xs:string" />
+                  <xs:attribute name="description" type="xs:string" />
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

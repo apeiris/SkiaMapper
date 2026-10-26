@@ -168,7 +168,7 @@ public class SkiaMapperControl : SKControl {
 
             // 4. Perform transformation using XmlReader & XmlWriter for clean stream handling
             using (var xmlReader = XmlReader.Create(MainForm.SourcePath))
-            using (var xmlWriter = XmlWriter.Create("output.html", xslt.OutputSettings)) {
+            using (var xmlWriter = XmlWriter.Create("POoutput.xml", xslt.OutputSettings)) {
                 xslt.Transform(xmlReader, args, xmlWriter);
             }
 
