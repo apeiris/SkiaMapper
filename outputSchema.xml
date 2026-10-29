@@ -1,20 +1,43 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <po>
-	<transaction typeId="xx" x12="xxx" senderId="" receiverId=""/>
-	<billto>
-		<a1></a1>
-		<a2></a2>
-		<postalCode></postalCode>
-		<City></City>
-		<Country></Country>
-	</billto>
-	<DeliverTo>
-		<a1></a1>
-		<a2></a2>
-		<postalCode></postalCode>
-		<City></City>
-		<Country></Country>
-	</DeliverTo>
+	<!--PONumber=BEG03 PODate=BEG05  AckType=BEG07(AC,AD,AE,AK,AP,AT,NA,RD,RF,RJ,RN,RO,RV,ZZ)-->
+	<transaction typeId="xx" x12="xxx" senderId="" receiverId="" PoNumber="" PODate=""/>
+	<Contact>
+		<FuncCode></FuncCode><!-- PER01-->
+		<Name></Name> <!--PER02-->
+		<ComQ></ComQ><!--PER03 Communication Qualifier-->
+		<ComNumber></ComNumber><!-- PER04 -->
+	</Contact><!--PER>-->
+	<TAX>
+		<ID></ID><!-- TAX01-->
+		<LocationQualifier></LocationQualifier> <!-- TAX02 -->
+		<LocationIdentifier></LocationIdentifier> <!-- TAX03-->
+		<TaxExemptCode></TaxExemptCode><!-- TAX12-->
+	</TAX>
+	<Billto>
+		<IDCode></IDCode> <!--BY / BT-->
+		<Name></Name> <!--N102-->
+		<GLN></GLN> <!--N103 Global Location Number(GLN)-->
+		<GLNCode></GLNCode>	<!--N104-->
+		<Address1></Address1> <!--N301-->
+		<Address2></Address2>
+		<City></City> <!--N401-->
+		<StateProvince></StateProvince>	<!--N402-->
+		<PostalCode></PostalCode>	<!--N403-->
+		<CountryCode></CountryCode>	<!--N404-->
+	</Billto>
+	<ShipTo>
+		<IDCode></IDCode><!--ST-->
+		<Name></Name> <!--N102-->
+		<GLN></GLN><!--N103 Global Location Number(GLN)-->
+		<GLNCode></GLNCode><!--N104-->
+		<Address1></Address1><!--N301-->
+		<Address2></Address2>
+		<City></City><!--N401-->
+		<StateProvince></StateProvince><!--N402-->
+		<PostalCode></PostalCode><!--N403-->
+		<CountryCode></CountryCode><!--N404-->
+	</ShipTo>
 	<lines>
 		<!-- 101 =id,102=qty,103=uom,104=price,106= pidQ(ProdId Qualifier),107=prodId, description=501 from pid051 from pid loop -->
 		<line id="1" qty="10" uom="ea" price="22.00" pidq="VN" pid="123915" description="ESP32-S3 8MB "  ></line>

@@ -85,6 +85,17 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
+<Functoid name="If" catId="3" Id="300">
+		<MethodNameFormat>({0},{1})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+public string If(string condition="ST",string trueValue="" ) {
+    bool isTrue = !string.IsNullOrEmpty(condition) && condition.Trim().Equals("ST", StringComparison.OrdinalIgnoreCase);
+    return isTrue ? trueValue : string.Empty;
+}
+      ]]>
+		</ScriptTemplate>
+	</Functoid>
 
 	<Functoid name="Add Days" catId="4" Id="300" >
 		<MethodNameFormat>DateTime.Parse({0}).AddDays({1}).ToString("yyyy-MM-dd")</MethodNameFormat>
@@ -166,35 +177,28 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
-	
+
 	<Functoid name="Select Xml" catId="7" Id="710" >
 		<MethodNameFormat>SelectXml({0}, {1}, {2}, {3})</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
   public string SelectXml(string lookupValue) {
    string connectionString = @"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
-   
    try {
         using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
         using (var cmd = new Microsoft.Data.SqlClient.SqlCommand("Select PartnerCode,PartnerName,ISA06,AddressLine1,AddressLine2,City,StateProvince,PostalCode,CountryCode from Partner where PartnerCode=@Param", conn)) {    
             cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
-            
             using (var adapter = new Microsoft.Data.SqlClient.SqlDataAdapter(cmd)) {
                  var dt = new DataTable("Rows");
                  adapter.Fill(dt);
-
-                 // Serialize the DataTable to an XML string
                  using (var sw = new System.IO.StringWriter()) {
                      dt.WriteXml(sw, XmlWriteMode.IgnoreSchema);
                      string xml = sw.ToString();
-                     
-                     // Strip out both <DocumentElement> and <Rows> wrappers
                      xml = xml.Replace("<DocumentElement>", "")
                               .Replace("</DocumentElement>", "")
                               .Replace("<Rows>", "")
                               .Replace("</Rows>", "")
                               .Trim();
-                              
                      return xml;
                  }
              }
@@ -209,6 +213,54 @@
 		</ScriptTemplate>
 	</Functoid>
 
+	<Functoid name="GetPartner" catId="7" Id="720">
+		<MethodNameFormat>GetPartner({0}) </MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+public string GetBillToByIsa06(string isa05, string isa06) {
+            if (string.IsNullOrWhiteSpace(isa06)) return string.Empty;
+
+            string connectionString = @"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=True;TrustServerCertificate=True;";
+            string partnerCode = null;
+            string addressOutput = string.Empty;
+
+            using (var connection = new SqlConnection(connectionString)) {
+                connection.Open();
+
+                // 1. Check if ISA06 exists in Partner table
+                using (var cmd = new SqlCommand("SELECT PartnerId FROM Partner WHERE PartnerId = @ISA06 and IdQualifier=@isa05", connection)) {
+                    cmd.Parameters.AddWithValue("@ISA05", isa05.Trim());
+                    cmd.Parameters.AddWithValue("@ISA06", isa06.Trim());
+
+                    var result = cmd.ExecuteScalar();
+                    if (result != null) partnerCode = result.ToString();
+                }
+
+                // 2. If missing, insert new partner
+                if (string.IsNullOrEmpty(partnerCode)) {
+                    partnerCode = isa06.Trim();
+                    using (var cmd = new SqlCommand("INSERT INTO Partner (PartnerId, PartnerName,IdQualifier ) VALUES (@Code, @Name, @ISA05)", connection)) {
+                        cmd.Parameters.AddWithValue("@Code", partnerCode);
+                        cmd.Parameters.AddWithValue("@Name", $"Partner {isa06}");
+                        cmd.Parameters.AddWithValue("@ISA05", isa05.Trim());
+                        cmd.ExecuteNonQuery();
+                    }
+                }
+
+                // 3. Retrieve BillTo address
+                //using (var cmd = new SqlCommand("SELECT TOP 1 AddressLine1, City, StateProvince, PostalCode FROM Addresses WHERE PartnerCode = @Code AND AddressType = 'BillTo'", connection)) {
+                //    cmd.Parameters.AddWithValue("@Code", partnerCode);
+                //    using (var reader = cmd.ExecuteReader()) {
+                //        if (reader.Read()) {
+                //            addressOutput = $"{reader["AddressLine1"]}, {reader["City"]}, {reader["StateProvince"]} {reader["PostalCode"]}";
+                //        }
+                //    }
+                //}
+            }
+            return addressOutput;
+        }]]>
+		</ScriptTemplate>
+	</Functoid>
 	<!-- Advanced / Looping -->
 	<Functoid name="Looping" catId="8" Id="800">
 		<MethodNameFormat>Looping({0})</MethodNameFormat>

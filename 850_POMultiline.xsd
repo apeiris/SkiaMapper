@@ -1,236 +1,213 @@
-<?xml version="1.0" encoding="utf-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
-  <!-- Root Interchange Element -->
+<?xml version="1.0"?>
+<xs:schema elementFormDefault="qualified" id="GeneratedFromSchemaNode" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <xs:element name="Interchange">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="ISA" type="ISAType" />
-        <xs:element name="FunctionGroup" type="FunctionGroupType" />
-        <xs:element name="IEA" type="IEAType" />
+        <xs:element name="ISA">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="ISA01" type="xs:string" />
+              <xs:element name="ISA02" type="xs:string" />
+              <xs:element name="ISA03" type="xs:string" />
+              <xs:element name="ISA04" type="xs:string" />
+              <xs:element name="ISA05" type="xs:string" />
+              <xs:element name="ISA06" type="xs:string" />
+              <xs:element name="ISA07" type="xs:string" />
+              <xs:element name="ISA08" type="xs:string" />
+              <xs:element name="ISA09" type="xs:string" />
+              <xs:element name="ISA10" type="xs:string" />
+              <xs:element name="ISA11" type="xs:string" />
+              <xs:element name="ISA12" type="xs:string" />
+              <xs:element name="ISA13" type="xs:string" />
+              <xs:element name="ISA14" type="xs:string" />
+              <xs:element name="ISA15" type="xs:string" />
+              <xs:element name="ISA16">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="ISA1601" type="xs:string" />
+                    <xs:element name="ISA1602" type="xs:string" />
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="FunctionGroup">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="GS">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="GS01" type="xs:string" />
+                    <xs:element name="GS02" type="xs:string" />
+                    <xs:element name="GS03" type="xs:string" />
+                    <xs:element name="GS04" type="xs:string" />
+                    <xs:element name="GS05" type="xs:string" />
+                    <xs:element name="GS06" type="xs:string" />
+                    <xs:element name="GS07" type="xs:string" />
+                    <xs:element name="GS08" type="xs:string" />
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="Transaction">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="ST">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="ST01" type="xs:string" />
+                          <xs:element name="ST02" type="xs:string" />
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="BEG">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="BEG01" type="xs:string" />
+                          <xs:element name="BEG02" type="xs:string" />
+                          <xs:element name="BEG03" type="xs:string" />
+                          <xs:element name="BEG04" type="xs:string" />
+                          <xs:element name="BEG05" type="xs:string" />
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="CUR">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="CUR01" type="xs:string" />
+                          <xs:element name="CUR02" type="xs:string" />
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="Loop__N1">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="N1">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="N101" type="xs:string" />
+                                <xs:element name="N102" type="xs:string" />
+                                <xs:element name="N103" type="xs:string" />
+                                <xs:element name="N104" type="xs:string" />
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element name="N3">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="N301" type="xs:string" />
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element name="N4">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="N401" type="xs:string" />
+                                <xs:element name="N402" type="xs:string" />
+                                <xs:element name="N403" type="xs:string" />
+                                <xs:element name="N404" type="xs:string" />
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="LoopId" type="xs:string" />
+                        <xs:attribute name="Name" type="xs:string" />
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="Loop__PO1">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="PO1">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="PO101" type="xs:string" />
+                                <xs:element name="PO102" type="xs:string" />
+                                <xs:element name="PO103" type="xs:string" />
+                                <xs:element name="PO104" type="xs:string" />
+                                <xs:element name="PO105" type="xs:string" />
+                                <xs:element name="PO106" type="xs:string" />
+                                <xs:element name="PO107" type="xs:string" />
+                                <xs:element name="PO108" type="xs:string" />
+                                <xs:element name="PO109" type="xs:string" />
+                                <xs:element name="PO110" type="xs:string" />
+                                <xs:element name="PO111" type="xs:string" />
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                          <xs:element name="Loop__PID">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="PID">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element name="PID01" type="xs:string" />
+                                      <xs:element name="PID02" type="xs:string" />
+                                      <xs:element name="PID03" type="xs:string" />
+                                      <xs:element name="PID04" type="xs:string" />
+                                      <xs:element name="PID05" type="xs:string" />
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                              <xs:attribute name="LoopId" type="xs:string" />
+                              <xs:attribute name="Name" type="xs:string" />
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="LoopId" type="xs:string" />
+                        <xs:attribute name="Name" type="xs:string" />
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="Loop__CTT">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="CTT">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="CTT01" type="xs:string" />
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="LoopId" type="xs:string" />
+                        <xs:attribute name="Name" type="xs:string" />
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element name="SE">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="SE01" type="xs:string" />
+                          <xs:element name="SE02" type="xs:string" />
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                  <xs:attribute name="ControlNumber" type="xs:string" />
+                </xs:complexType>
+              </xs:element>
+              <xs:element name="GE">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="GE01" type="xs:string" />
+                    <xs:element name="GE02" type="xs:string" />
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+        <xs:element name="IEA">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="IEA01" type="xs:string" />
+              <xs:element name="IEA02" type="xs:string" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
       </xs:sequence>
-      <xs:attribute name="segment-terminator" type="xs:string" use="required" />
-      <xs:attribute name="element-separator" type="xs:string" use="required" />
-      <xs:attribute name="sub-element-separator" type="xs:string" use="required" />
+      <xs:attribute name="segment-terminator" type="xs:string" />
+      <xs:attribute name="element-separator" type="xs:string" />
+      <xs:attribute name="sub-element-separator" type="xs:string" />
     </xs:complexType>
   </xs:element>
-
-  <!-- ISA Segment Type -->
-  <xs:complexType name="ISAType">
-    <xs:sequence>
-      <xs:element name="ISA01" type="xs:string" />
-      <xs:element name="ISA02" type="xs:string" />
-      <xs:element name="ISA03" type="xs:string" />
-      <xs:element name="ISA04" type="xs:string" />
-      <xs:element name="ISA05" type="xs:string" />
-      <xs:element name="ISA06" type="xs:string" />
-      <xs:element name="ISA07" type="xs:string" />
-      <xs:element name="ISA08" type="xs:string" />
-      <xs:element name="ISA09" type="xs:string" />
-      <xs:element name="ISA10" type="xs:string" />
-      <xs:element name="ISA11" type="xs:string" />
-      <xs:element name="ISA12" type="xs:string" />
-      <xs:element name="ISA13" type="xs:string" />
-      <xs:element name="ISA14" type="xs:string" />
-      <xs:element name="ISA15" type="xs:string" />
-      <xs:element name="ISA16" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- Function Group Type -->
-  <xs:complexType name="FunctionGroupType">
-    <xs:sequence>
-      <xs:element name="GS" type="GSType" />
-      <xs:element name="Transaction" type="TransactionType" maxOccurs="unbounded" />
-      <xs:element name="GE" type="GEType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- GS Segment Type -->
-  <xs:complexType name="GSType">
-    <xs:sequence>
-      <xs:element name="GS01" type="xs:string" />
-      <xs:element name="GS02" type="xs:string" />
-      <xs:element name="GS03" type="xs:string" />
-      <xs:element name="GS04" type="xs:string" />
-      <xs:element name="GS05" type="xs:string" />
-      <xs:element name="GS06" type="xs:string" />
-      <xs:element name="GS07" type="xs:string" />
-      <xs:element name="GS08" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- Transaction Set (e.g., 850 Purchase Order) -->
-  <xs:complexType name="TransactionType">
-    <xs:sequence>
-      <xs:element name="ST" type="STType" />
-      <xs:element name="BEG" type="BEGType" />
-      <xs:element name="REF" type="REFType" minOccurs="0" maxOccurs="unbounded" />
-      <xs:element name="DTM" type="DTMType" minOccurs="0" maxOccurs="unbounded" />
-      
-      <!-- N1 Name Loop -->
-      <xs:element name="Loop" type="N1LoopType" minOccurs="0" maxOccurs="unbounded" />
-
-      <!-- Line Item (PO1) Loops -->
-      <xs:element name="Loop" type="PO1LoopType" maxOccurs="unbounded" />
-
-      <!-- CTT Transaction Totals Loop -->
-      <xs:element name="Loop" type="CTTLoopType" minOccurs="0" />
-
-      <xs:element name="SE" type="SEType" />
-    </xs:sequence>
-    <xs:attribute name="ControlNumber" type="xs:string" use="optional" />
-  </xs:complexType>
-
-  <!-- ST and SE Segments -->
-  <xs:complexType name="STType">
-    <xs:sequence>
-      <xs:element name="ST01" type="xs:string" />
-      <xs:element name="ST02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="SEType">
-    <xs:sequence>
-      <xs:element name="SE01" type="xs:int" />
-      <xs:element name="SE02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- BEG, REF, DTM Segments -->
-  <xs:complexType name="BEGType">
-    <xs:sequence>
-      <xs:element name="BEG01" type="xs:string" />
-      <xs:element name="BEG02" type="xs:string" />
-      <xs:element name="BEG03" type="xs:string" />
-      <xs:element name="BEG04" type="xs:string" minOccurs="0" />
-      <xs:element name="BEG05" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="REFType">
-    <xs:sequence>
-      <xs:element name="REF01" type="xs:string" />
-      <xs:element name="REF02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="DTMType">
-    <xs:sequence>
-      <xs:element name="DTM01" type="xs:string" />
-      <xs:element name="DTM02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- Loops (N1, PO1, PID, CTT) -->
-  <xs:complexType name="N1LoopType">
-    <xs:sequence>
-      <xs:element name="N1" type="N1Type" />
-      <xs:element name="N3" type="N3Type" minOccurs="0" />
-      <xs:element name="N4" type="N4Type" minOccurs="0" />
-    </xs:sequence>
-    <xs:attribute name="LoopId" type="xs:string" fixed="N1" />
-    <xs:attribute name="Name" type="xs:string" />
-  </xs:complexType>
-
-  <xs:complexType name="N1Type">
-    <xs:sequence>
-      <xs:element name="N101" type="xs:string" />
-      <xs:element name="N102" type="xs:string" />
-      <xs:element name="N103" type="xs:string" />
-      <xs:element name="N104" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="N3Type">
-    <xs:sequence>
-      <xs:element name="N301" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="N4Type">
-    <xs:sequence>
-      <xs:element name="N401" type="xs:string" />
-      <xs:element name="N402" type="xs:string" />
-      <xs:element name="N403" type="xs:string" />
-      <xs:element name="N404" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="PO1LoopType">
-    <xs:sequence>
-      <xs:element name="PO1" type="PO1Type" />
-      <xs:element name="Loop" type="PIDLoopType" minOccurs="0" maxOccurs="unbounded" />
-    </xs:sequence>
-    <xs:attribute name="LoopId" type="xs:string" fixed="PO1" />
-    <xs:attribute name="Name" type="xs:string" />
-  </xs:complexType>
-
-  <xs:complexType name="PO1Type">
-    <xs:sequence>
-      <xs:element name="PO101" type="xs:int" />
-      <xs:element name="PO102" type="xs:decimal" />
-      <xs:element name="PO103" type="xs:string" />
-      <xs:element name="PO104" type="xs:decimal" />
-      <xs:element name="PO105" type="xs:string" minOccurs="0" />
-      <xs:element name="PO106" type="xs:string" />
-      <xs:element name="PO107" type="xs:string" />
-      <xs:element name="PO108" type="xs:string" />
-      <xs:element name="PO109" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="PIDLoopType">
-    <xs:sequence>
-      <xs:element name="PID" type="PIDType" />
-    </xs:sequence>
-    <xs:attribute name="LoopId" type="xs:string" fixed="PID" />
-    <xs:attribute name="Name" type="xs:string" />
-  </xs:complexType>
-
-  <xs:complexType name="PIDType">
-    <xs:sequence>
-      <xs:element name="PID01" type="xs:string" />
-      <xs:element name="PID02" type="xs:string" minOccurs="0" />
-      <xs:element name="PID03" type="xs:string" minOccurs="0" />
-      <xs:element name="PID04" type="xs:string" minOccurs="0" />
-      <xs:element name="PID05" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="CTTLoopType">
-    <xs:sequence>
-      <xs:element name="CTT" type="CTTType" />
-    </xs:sequence>
-    <xs:attribute name="LoopId" type="xs:string" fixed="CTT" />
-    <xs:attribute name="Name" type="xs:string" />
-  </xs:complexType>
-
-  <xs:complexType name="CTTType">
-    <xs:sequence>
-      <xs:element name="CTT01" type="xs:int" />
-      <xs:element name="CTT02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- GE and IEA Trailer Segments -->
-  <xs:complexType name="GEType">
-    <xs:sequence>
-      <xs:element name="GE01" type="xs:int" />
-      <xs:element name="GE02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="IEAType">
-    <xs:sequence>
-      <xs:element name="IEA01" type="xs:int" />
-      <xs:element name="IEA02" type="SubElementType" />
-    </xs:sequence>
-  </xs:complexType>
-  <!-- Reusable Sub-element Type (for composite fields like ISA16, GS08, PO109, etc.) -->
-  <xs:complexType name="SubElementType">
-    <xs:sequence>
-      <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax" />
-    </xs:sequence>
-    <xs:anyAttribute processContents="lax" />
-  </xs:complexType>
 </xs:schema>

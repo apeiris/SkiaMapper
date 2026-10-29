@@ -218,27 +218,41 @@ namespace SkiaMapper.Services {
                 string sourceExpr = TraceSourceEndpoint(connection.Source, out bool isFunctoidCall);
                 currentNode.ValueExpression = sourceExpr;
 
+
+
                 // --- DYNAMIC CONTAINER LOOP DETECTION ---
-                if (path.Contains("line") || path.Contains("Line") || path.Contains("Loop") || sourceExpr.Contains("Loop")) {
-                    string rawPath = sourceExpr;
-                    if (connection.Source?.Type == ConnectionEndpointType.Functoid) {
+                if (path.Contains("Loop") || (connection.Source != null && connection.Source.NodePath != null && connection.Source.NodePath.Contains("Loop"))) {
+                    string rawPath = string.Empty;
+
+                    if (connection.Source?.Type == ConnectionEndpointType.SourceNode) {
+                        rawPath = $"//{ToValidXPath(connection.Source.NodePath)}";
+                    } else if (connection.Source?.Type == ConnectionEndpointType.Functoid) {
                         var srcFunctoid = _activeFunctoids.FirstOrDefault(f => f.Id == connection.Source.FunctoidInstanceId);
                         if (srcFunctoid != null && srcFunctoid.Definition?.Name == "Looping") {
                             rawPath = GetLoopingFunctoidRawPath(srcFunctoid.Id);
+                        } else {
+                            // Fallback: grab the first source node path feeding this functoid
+                            var firstInputWire = _connections.FirstOrDefault(c => c.Target?.FunctoidInstanceId == srcFunctoid?.Id && c.Source?.NodePath != null);
+                            if (firstInputWire?.Source != null) {
+                                rawPath = $"//{ToValidXPath(firstInputWire.Source.NodePath)}";
+                            }
                         }
                     }
 
-                    // Dynamically anchor to the parent Loop container if the path terminates in a child segment
                     if (!string.IsNullOrEmpty(rawPath)) {
-                        if (!rawPath.Contains("Loop[@LoopId") || rawPath.EndsWith("/PO1") || rawPath.EndsWith("/HL") || rawPath.EndsWith("/CTT")) {
-                            int lastSlashIndex = rawPath.LastIndexOf('/');
-                            if (lastSlashIndex > 0) {
-                                rawPath = rawPath.Substring(0, lastSlashIndex);
+                        // Isolate the Loop container element, e.g. //Loop[@LoopId='N1']
+                        int loopIndex = rawPath.LastIndexOf("Loop[@LoopId");
+                        if (loopIndex >= 0) {
+                            int closingBracket = rawPath.IndexOf(']', loopIndex);
+                            if (closingBracket > 0) {
+                                rawPath = rawPath.Substring(0, closingBracket + 1);
                             }
                         }
                         currentNode.LoopSourcePath = rawPath;
                     }
                 }
+
+
             }
 
             // Recursively render the nested XML structure into the XSLT template

@@ -3,8 +3,8 @@
   <ActiveFunctoids>
     <FunctoidInstance>
       <Id>7d140e8f-2135-443a-aa2e-58a3149d486d</Id>
-      <X>265</X>
-      <Y>96</Y>
+      <X>349</X>
+      <Y>27</Y>
       <Width>110</Width>
       <Height>36</Height>
       <Definition Id="700" name="Database Lookup" catId="7" isVariable="false">
@@ -54,8 +54,8 @@ try {
     </FunctoidInstance>
     <FunctoidInstance>
       <Id>cef951bf-f14c-4eac-a257-06588635ca80</Id>
-      <X>74</X>
-      <Y>122</Y>
+      <X>59</X>
+      <Y>111</Y>
       <Width>110</Width>
       <Height>36</Height>
       <Definition Id="120" name="Trim" catId="1" isVariable="false">
@@ -74,35 +74,16 @@ try {
       <CustomMethodName>Trim</CustomMethodName>
     </FunctoidInstance>
     <FunctoidInstance>
-      <Id>6b8a975a-d69b-46a7-ba0d-6c38c9ed7436</Id>
-      <X>248</X>
-      <Y>227</Y>
+      <Id>5921d8a7-e5fe-48f9-bb4f-b6f018903207</Id>
+      <X>331</X>
+      <Y>124</Y>
       <Width>110</Width>
       <Height>36</Height>
-      <Definition Id="700" name="Database Lookup" catId="7" isVariable="false">
-        <MethodNameFormat>DatabaseLookup({0}, {1}, {2}, {3})</MethodNameFormat>
+      <Definition Id="710" name="Select Xml" catId="7" isVariable="false">
+        <MethodNameFormat>SelectXml({0}, {1}, {2}, {3})</MethodNameFormat>
         <JoinOperator />
         <ScriptTemplate>
-   public string DatabaseLookup(string query,string lookupValue) {
-   string connectionString=@"Server=DESKTOP-H7BVMV9\\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
-   try {
-        using (var conn = new System.Data.SqlClient.SqlConnection(connectionString))
-        using (var cmd = new System.Data.SqlClient.SqlCommand(query, conn)) {
-            cmd.Parameters.Add(new System.Data.SqlClient.SqlParameter("@Param", lookupValue));
-            conn.Open();
-            var result = cmd.ExecuteScalar();
-            return result != null ? result.ToString() : string.Empty;
-        }
-    }
-    catch (Exception ex) {
-        // Gracefully return empty string on connection failures, missing columns, or bad keys
-        return string.Empty;
-    }
-}
-      </ScriptTemplate>
-        <InputParametersCount>1</InputParametersCount>
-      </Definition>
-      <CustomScriptBody>public string SelectLookup(string lookupValue) {
+  public string SelectXml(string lookupValue) {
    string connectionString = @"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
    
    try {
@@ -110,16 +91,60 @@ try {
         using (var cmd = new Microsoft.Data.SqlClient.SqlCommand("Select PartnerCode,PartnerName,ISA06,AddressLine1,AddressLine2,City,StateProvince,PostalCode,CountryCode from Partner where PartnerCode=@Param", conn)) {    
             cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
             
-            // Fully qualify SqlDataAdapter under Microsoft.Data.SqlClient
             using (var adapter = new Microsoft.Data.SqlClient.SqlDataAdapter(cmd)) {
                  var dt = new DataTable("Rows");
-                 
                  adapter.Fill(dt);
 
-                 // Serialize the DataTable to an XML string so XSLT can iterate over the rows
+                 // Serialize the DataTable to an XML string
                  using (var sw = new System.IO.StringWriter()) {
                      dt.WriteXml(sw, XmlWriteMode.IgnoreSchema);
-                     return sw.ToString();
+                     string xml = sw.ToString();
+                     
+                     // Strip out both &lt;DocumentElement&gt; and &lt;Rows&gt; wrappers
+                     xml = xml.Replace("&lt;DocumentElement&gt;", "")
+                              .Replace("&lt;/DocumentElement&gt;", "")
+                              .Replace("&lt;Rows&gt;", "")
+                              .Replace("&lt;/Rows&gt;", "")
+                              .Trim();
+                              
+                     return xml;
+                 }
+             }
+         }
+    }
+    catch (Exception ex) {
+        // Gracefully return error message or empty string on failure
+        return ex.Message;
+    }
+}
+      </ScriptTemplate>
+        <InputParametersCount>1</InputParametersCount>
+      </Definition>
+      <CustomScriptBody>public string SelectDeliverToXml(string lookupValue) {
+   string connectionString = @"Server=DESKTOP-H7BVMV9\SQLEXPRESS;Database=EDI;Integrated Security=true;TrustServerCertificate=true;";
+   
+   try {
+        using (var conn = new Microsoft.Data.SqlClient.SqlConnection(connectionString))
+        using (var cmd = new Microsoft.Data.SqlClient.SqlCommand("Select PartnerCode,PartnerName,ISA06,AddressLine1,AddressLine2,City,StateProvince,PostalCode,CountryCode from Partner where PartnerCode=@Param", conn)) {    
+            cmd.Parameters.Add(new Microsoft.Data.SqlClient.SqlParameter("@Param", lookupValue));
+            
+            using (var adapter = new Microsoft.Data.SqlClient.SqlDataAdapter(cmd)) {
+                 var dt = new DataTable("Rows");
+                 adapter.Fill(dt);
+
+                 // Serialize the DataTable to an XML string
+                 using (var sw = new System.IO.StringWriter()) {
+                     dt.WriteXml(sw, XmlWriteMode.IgnoreSchema);
+                     string xml = sw.ToString();
+                     
+                     // Strip out both &lt;DocumentElement&gt; and &lt;Rows&gt; wrappers
+                     xml = xml.Replace("&lt;DocumentElement&gt;", "")
+                              .Replace("&lt;/DocumentElement&gt;", "")
+                              .Replace("&lt;Rows&gt;", "")
+                              .Replace("&lt;/Rows&gt;", "")
+                              .Trim();
+                              
+                     return xml;
                  }
              }
          }
@@ -129,7 +154,7 @@ try {
         return ex.Message;
     }
 }</CustomScriptBody>
-      <CustomMethodName>SelectLookup</CustomMethodName>
+      <CustomMethodName>SelectDeliverToXml</CustomMethodName>
     </FunctoidInstance>
   </ActiveFunctoids>
   <Connections>
@@ -175,21 +200,6 @@ try {
         <Type>Functoid</Type>
         <NodePath />
         <FunctoidInstanceId>7d140e8f-2135-443a-aa2e-58a3149d486d</FunctoidInstanceId>
-        <InputIndex>0</InputIndex>
-      </Target>
-    </MappingConnection>
-    <MappingConnection>
-      <Id>ae71d31a-631b-4b62-a588-518ef75d0979</Id>
-      <Source>
-        <Type>Functoid</Type>
-        <NodePath />
-        <FunctoidInstanceId>cef951bf-f14c-4eac-a257-06588635ca80</FunctoidInstanceId>
-        <InputIndex>0</InputIndex>
-      </Source>
-      <Target>
-        <Type>DestinationNode</Type>
-        <NodePath>po/billto/a2</NodePath>
-        <FunctoidInstanceId xsi:nil="true" />
         <InputIndex>0</InputIndex>
       </Target>
     </MappingConnection>
@@ -314,7 +324,7 @@ try {
       </Target>
     </MappingConnection>
     <MappingConnection>
-      <Id>ba01e007-5e4c-4750-bbc3-af813712a448</Id>
+      <Id>d193dae4-6f02-44b3-a257-6d1084008b06</Id>
       <Source>
         <Type>Functoid</Type>
         <NodePath />
@@ -324,21 +334,21 @@ try {
       <Target>
         <Type>Functoid</Type>
         <NodePath />
-        <FunctoidInstanceId>6b8a975a-d69b-46a7-ba0d-6c38c9ed7436</FunctoidInstanceId>
+        <FunctoidInstanceId>5921d8a7-e5fe-48f9-bb4f-b6f018903207</FunctoidInstanceId>
         <InputIndex>0</InputIndex>
       </Target>
     </MappingConnection>
     <MappingConnection>
-      <Id>2b3f80b7-aeb8-4dbe-a553-19b67937685c</Id>
+      <Id>d0e73dca-cc0d-49ac-9a87-4c665970e579</Id>
       <Source>
         <Type>Functoid</Type>
         <NodePath />
-        <FunctoidInstanceId>6b8a975a-d69b-46a7-ba0d-6c38c9ed7436</FunctoidInstanceId>
+        <FunctoidInstanceId>5921d8a7-e5fe-48f9-bb4f-b6f018903207</FunctoidInstanceId>
         <InputIndex>0</InputIndex>
       </Source>
       <Target>
         <Type>DestinationNode</Type>
-        <NodePath>po/billto/postalCode</NodePath>
+        <NodePath>po/DeliverTo</NodePath>
         <FunctoidInstanceId xsi:nil="true" />
         <InputIndex>0</InputIndex>
       </Target>
