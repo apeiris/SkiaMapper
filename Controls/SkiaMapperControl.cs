@@ -67,6 +67,8 @@ public class SkiaMapperControl : SKControl {
     private SKRect clearBtnRect;
     private SKRect executeXsltBtnRect;
     private SKRect xsltFileEllipsisRect;
+    private SKRect showOutputCheckboxRect;
+    private bool showOutputChecked = true;
 
 
 
@@ -141,7 +143,7 @@ public class SkiaMapperControl : SKControl {
         // Automatically sets IsCanvasDirty = true on any layout additions, deletions, or clears
         ActiveFunctoids.CollectionChanged += OnCanvasStructureChanged;
         Connections.CollectionChanged += OnCanvasStructureChanged;
-       
+
     }
     /// <summary>
     /// Execution pipeline endpoint triggered by the toolbox transform button.
@@ -172,6 +174,17 @@ public class SkiaMapperControl : SKControl {
                 xslt.Transform(xmlReader, args, xmlWriter);
             }
 
+            if (showOutputChecked) {
+                try {
+                    // Open the custom Windows Form viewer containing the WebBrowser control
+                    using (var viewerForm = new SkiaMapper.Forms.OutputViewerForm("POoutput.xml")) {
+                        viewerForm.ShowDialog(this);
+                    }
+                } catch (Exception ex) {
+                    System.Diagnostics.Debug.WriteLine($"Failed to open output viewer form: {ex.Message}");
+                }
+            }
+            else
             AutoFadeMessageBox.Show(
                     "XSLT transformation executed successfully!",
                     "Execution Complete", 5000
@@ -208,17 +221,22 @@ public class SkiaMapperControl : SKControl {
             transform.Load(openXsltDialog.FileName);
             transform.Transform(openXmlDialog.FileName, saveOutputDialog.FileName);
 
+            if (showOutputChecked) {
+                try {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
+                        FileName = Path.GetFullPath(saveOutputDialog.FileName),
+                        UseShellExecute = true
+                    });
+                } catch (Exception ex) {
+                    System.Diagnostics.Debug.WriteLine($"Failed to open output in browser: {ex.Message}");
+                }
+            }
+
             AutoFadeMessageBox.Show(
                 "XSLT transformation executed successfully!",
                 "Execution Complete", 2000
             );
         } catch (Exception ex) {
-            //MessageBox.Show(
-            //    $"Failed to execute XSLT transformation:\n{ex.Message}",
-            //    "Execution Error",
-            //    MessageBoxButtons.OK,
-            //    MessageBoxIcon.Error
-            //);
             ErrorHelper.HandleException(ex, "parsing error");
             AutoFadeMessageBox.Show("Error during xslt transformation, Error copied to clipboard", "failed", 2000);
         }
@@ -431,7 +449,6 @@ public class SkiaMapperControl : SKControl {
     }
     private void EditScriptItem_Click(object? sender, EventArgs e) {
         if (contextTargetInstance != null) {
-            //using var editor = new Forms.ScriptEditorDialog(contextTargetInstance);
             using var editor = new ScriptEditorDialog(contextTargetInstance, this);
             if (editor.ShowDialog() == DialogResult.OK) {
                 // Script property allocations saved cleanly inside modal context
@@ -1086,10 +1103,6 @@ public class SkiaMapperControl : SKControl {
         // =================================================================================
         // ROW 2 ACTION LAYOUT ENGINE (Dedicated Transformation Row)
         // =================================================================================
-
-        // =================================================================================
-        // ROW 2 ACTION LAYOUT ENGINE (Dedicated Transformation Row)
-        // =================================================================================
         if (isPaletteExpanded) {
             float row2CenterY = paletteBounds.Top + row1Height + (row1Height / 2f);
             float row2LeftX = paletteBounds.Left + 12f;
@@ -1116,6 +1129,32 @@ public class SkiaMapperControl : SKControl {
                 row2CenterY + (xsltBtnHeight / 2f)
             );
 
+            // "Show output" Checkbox placed to the left of the ellipsis button
+            float checkboxWidth = 14f;
+            float checkboxHeight = 14f;
+            showOutputCheckboxRect = new SKRect(
+                xsltFileEllipsisRect.Left - 115f,
+                row2CenterY - (checkboxHeight / 2f),
+                xsltFileEllipsisRect.Left - 115f + checkboxWidth,
+                row2CenterY - (checkboxHeight / 2f) + checkboxHeight
+            );
+
+            using var boxBgPaint = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill, IsAntialias = true };
+            using var boxBorderPaint = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true };
+            using var checkPaint = new SKPaint { Color = new SKColor(40, 50, 70), Style = SKPaintStyle.Stroke, StrokeWidth = 2f, IsAntialias = true };
+            using var labelFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Normal, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f);
+            using var labelTextPaint = new SKPaint { Color = new SKColor(200, 214, 229), IsAntialias = true };
+
+            canvas.DrawRoundRect(showOutputCheckboxRect, 2f, 2f, boxBgPaint);
+            canvas.DrawRoundRect(showOutputCheckboxRect, 2f, 2f, boxBorderPaint);
+
+            if (showOutputChecked) {
+                canvas.DrawLine(showOutputCheckboxRect.Left + 3f, showOutputCheckboxRect.MidY, showOutputCheckboxRect.Left + 6f, showOutputCheckboxRect.Bottom - 3f, checkPaint);
+                canvas.DrawLine(showOutputCheckboxRect.Left + 6f, showOutputCheckboxRect.Bottom - 3f, showOutputCheckboxRect.Right - 2f, showOutputCheckboxRect.Top + 3f, checkPaint);
+            }
+
+            canvas.DrawText("Show output", showOutputCheckboxRect.Right + 6f, row2CenterY + 4f, labelFont, labelTextPaint);
+
             using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
             using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
             using (var btnFont = new SKFont(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 12f))
@@ -1125,13 +1164,13 @@ public class SkiaMapperControl : SKControl {
                 canvas.DrawText("...", xsltFileEllipsisRect.MidX, xsltFileEllipsisRect.MidY + 4f, SKTextAlign.Center, btnFont, btnTextPaint);
             }
 
-            // Render XSLT file name label and execute text, clipped so it doesn't overlap the ellipsis button
+            // Render XSLT file name label and execute text, clipped so it doesn't overlap the checkbox
             string xsltFileName = !string.IsNullOrWhiteSpace(MainForm.XsltPath)
                 ? System.IO.Path.GetFileName(MainForm.XsltPath)
                 : "Transform.xslt";
 
             string executeText = $"Execute ({xsltFileName})";
-            SKRect textClipRect = new SKRect(executeXsltBtnRect.Right + 8f, paletteBounds.Top + row1Height, xsltFileEllipsisRect.Left - 8f, paletteBounds.Top + (row1Height * 2f));
+            SKRect textClipRect = new SKRect(executeXsltBtnRect.Right + 8f, paletteBounds.Top + row1Height, showOutputCheckboxRect.Left - 8f, paletteBounds.Top + (row1Height * 2f));
 
             canvas.Save();
             canvas.ClipRect(textClipRect);
@@ -1142,7 +1181,7 @@ public class SkiaMapperControl : SKControl {
 
 
         // =================================================================================
-        // RENDER CONTENS (Rest of the list view tracking logic stays intact)
+        // RENDER CONTENTS
         // =================================================================================
         if (isPaletteExpanded) {
             float itemWidth = paletteBounds.Width - 16f;
@@ -1408,6 +1447,11 @@ public class SkiaMapperControl : SKControl {
             }
 
             switch (e.Location) {
+                case var loc when showOutputCheckboxRect.Contains(loc.X, loc.Y):
+                    showOutputChecked = !showOutputChecked;
+                    Invalidate();
+                    return;
+
                 case var loc when executeXsltBtnRect.Contains(loc.X, loc.Y):
                     BtnExecuteTransform_Click(this, EventArgs.Empty);
                     return;
@@ -2172,7 +2216,6 @@ public class SkiaMapperControl : SKControl {
         if (dragSource != null) {
             ConnectionEndpoint? dragTarget = null;
 
-            // EVALUATE TARGET: Dropped onto a Destination Tree Node?
             // EVALUATE TARGET: Dropped onto a Destination Tree Node?
             if (e.X > centerRight && e.Y < mainContentHeight && DestinationRoot != null) {
                 float headerHeight = 32f;
