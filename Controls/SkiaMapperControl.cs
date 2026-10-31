@@ -120,6 +120,9 @@ public class SkiaMapperControl : SKControl {
     private readonly SKFont _headerTitleFont = new(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f);
     private readonly SKFont _ghostFont = new(SKTypeface.Default, 12f);
 
+    private SKRect sourceFileViewRect;
+    private SKRect destinationFileViewRect;
+
     #endregion Properties and Fields
 
     public SkiaMapperControl() {
@@ -580,8 +583,6 @@ public class SkiaMapperControl : SKControl {
     }
     #endregion RenderTreeElement 551,536,580,575
 
-
-
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
         if (DesignMode || LicenseManager.UsageMode == LicenseUsageMode.Designtime) {
             // Render simple placeholder text or skip Skia render initialization
@@ -626,19 +627,44 @@ public class SkiaMapperControl : SKControl {
             (headerHeight + btnHeight) / 2f
         );
 
+        // Source View Button (placed to the left of the ellipsis button)
+        sourceFileViewRect = new SKRect(
+            sourceFileEllipsisRect.Left - btnWidth - 4f,
+            sourceFileEllipsisRect.Top,
+            sourceFileEllipsisRect.Left - 4f,
+            sourceFileEllipsisRect.Bottom
+        );
+
         using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
         using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
-        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true })
+        using (var iconStroke = new SKPaint { Color = new SKColor(40, 50, 70), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true })
+        using (var iconFill = new SKPaint { Color = new SKColor(40, 50, 70), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+            // Ellipsis button
             canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBg);
             canvas.DrawRoundRect(sourceFileEllipsisRect, 3f, 3f, btnBorder);
             canvas.DrawText("...", sourceFileEllipsisRect.MidX, sourceFileEllipsisRect.MidY + 4f, SKTextAlign.Center, _headerButtonFont, btnTextPaint);
+
+            // Source View Button & Eye Icon
+            canvas.DrawRoundRect(sourceFileViewRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(sourceFileViewRect, 3f, 3f, btnBorder);
+
+            float cx1 = sourceFileViewRect.MidX;
+            float cy1 = sourceFileViewRect.MidY;
+            using (var eyePath = new SKPath()) {
+                eyePath.MoveTo(cx1 - 7f, cy1);
+                eyePath.QuadTo(cx1, cy1 - 6f, cx1 + 7f, cy1);
+                eyePath.QuadTo(cx1, cy1 + 6f, cx1 - 7f, cy1);
+                canvas.DrawPath(eyePath, iconStroke);
+            }
+            canvas.DrawCircle(cx1, cy1, 2f, iconFill);
         }
 
         string sourceLabelText = !string.IsNullOrWhiteSpace(MainForm.SourcePath)
             ? $"Source: {System.IO.Path.GetFileName(MainForm.SourcePath)}"
             : "Source Document";
 
-        SKRect labelClipRect = new SKRect(0, 0, sourceFileEllipsisRect.Left - 4f, headerHeight);
+        SKRect labelClipRect = new SKRect(0, 0, sourceFileViewRect.Left - 4f, headerHeight);
         canvas.Save();
         canvas.ClipRect(labelClipRect);
         using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
@@ -651,7 +677,7 @@ public class SkiaMapperControl : SKControl {
         canvas.Save();
         canvas.ClipRect(sourceClipArea);
 
-        float currentYLeft = 0f; // <--- MUST start at 0f for pure content-relative tracking
+        float currentYLeft = 0f;
         if (SourceRoot != null) {
             maxSourceContentHeight = RenderTreeElement(canvas, SourceRoot, 15f, ref currentYLeft, true, 0, "");
         }
@@ -678,12 +704,10 @@ public class SkiaMapperControl : SKControl {
             canvas.DrawRoundRect(new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight), 2.5f, 2.5f, thumbPaint);
         }
 
-
         // --- Middle Panel ---
         bgPaint.Color = new SKColor(245, 247, 250);
         canvas.DrawRect(centerLeft, 0, centerRight - centerLeft, mainContentHeight, bgPaint);
         RenderActiveGridFunctoids(canvas, centerLeft);
-
 
         // --- Right Panel ---
         bgPaint.Color = SKColors.GhostWhite;
@@ -704,19 +728,44 @@ public class SkiaMapperControl : SKControl {
             (headerHeight + btnHeight) / 2f
         );
 
+        // Destination View Button (placed to the left of the destination ellipsis button)
+        destinationFileViewRect = new SKRect(
+            destinationFileEllipsisRect.Left - btnWidth - 4f,
+            destinationFileEllipsisRect.Top,
+            destinationFileEllipsisRect.Left - 4f,
+            destinationFileEllipsisRect.Bottom
+        );
+
         using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
         using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
-        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true }) {
+        using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true })
+        using (var iconStroke = new SKPaint { Color = new SKColor(40, 50, 70), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true })
+        using (var iconFill = new SKPaint { Color = new SKColor(40, 50, 70), Style = SKPaintStyle.Fill, IsAntialias = true }) {
+            // Ellipsis button
             canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBg);
             canvas.DrawRoundRect(destinationFileEllipsisRect, 3f, 3f, btnBorder);
             canvas.DrawText("...", destinationFileEllipsisRect.MidX, destinationFileEllipsisRect.MidY + 4f, SKTextAlign.Center, _headerButtonFont, btnTextPaint);
+
+            // Destination View Button & Eye Icon
+            canvas.DrawRoundRect(destinationFileViewRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(destinationFileViewRect, 3f, 3f, btnBorder);
+
+            float cx2 = destinationFileViewRect.MidX;
+            float cy2 = destinationFileViewRect.MidY;
+            using (var eyePath = new SKPath()) {
+                eyePath.MoveTo(cx2 - 7f, cy2);
+                eyePath.QuadTo(cx2, cy2 - 6f, cx2 + 7f, cy2);
+                eyePath.QuadTo(cx2, cy2 + 6f, cx2 - 7f, cy2);
+                canvas.DrawPath(eyePath, iconStroke);
+            }
+            canvas.DrawCircle(cx2, cy2, 2f, iconFill);
         }
 
         string destLabelText = !string.IsNullOrWhiteSpace(MainForm.DestinationPath)
             ? $"Destination: {System.IO.Path.GetFileName(MainForm.DestinationPath)}"
             : "Destination Document";
 
-        SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileEllipsisRect.Left - 4f, headerHeight);
+        SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileViewRect.Left - 4f, headerHeight);
         canvas.Save();
         canvas.ClipRect(destLabelClipRect);
         using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
@@ -729,11 +778,12 @@ public class SkiaMapperControl : SKControl {
         canvas.Save();
         canvas.ClipRect(destClipArea);
 
-        float currentYRight = 0f; // <--- MUST start at 0f for pure content-relative tracking
+        float currentYRight = 0f;
         if (DestinationRoot != null) {
             maxDestinationContentHeight = RenderTreeElement(canvas, DestinationRoot, centerRight + 15f, ref currentYRight, false, 0, "");
         }
         canvas.Restore();
+
         // Draw Destination Scrollbar if content overflows
         float destViewableHeight = mainContentHeight - headerHeight;
         if (maxDestinationContentHeight > destViewableHeight) {
@@ -755,11 +805,7 @@ public class SkiaMapperControl : SKControl {
             canvas.DrawRoundRect(new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight), 2.5f, 2.5f, thumbPaint);
         }
 
-
- 
         // --- Log Panel ---
-    
-
         bgPaint.Color = SKColors.Black; // Solid black background
         canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
 
@@ -771,9 +817,6 @@ public class SkiaMapperControl : SKControl {
             canvas.DrawText(msg, 12f, logY, logFont, logTextPaint);
             logY += 18f;
         }
-
-
-
 
         // 2. Draw Floating Tool Palette Window
         RenderFunctoidToolPalette(canvas);
@@ -826,7 +869,6 @@ public class SkiaMapperControl : SKControl {
             float cp2X = targetPoint.X - controlOffset;
             float cp2Y = targetPoint.Y;
 
-            // 2026 - 10 - 20
             previewPath.CubicTo(cp1X, cp1Y, cp2X, cp2Y, targetPoint.X, targetPoint.Y);
             canvas.DrawPath(previewPath, dragPaint);
         }
@@ -846,6 +888,7 @@ public class SkiaMapperControl : SKControl {
             canvas.DrawText(draggingPaletteFunctoid.Name, ghostRect.MidX, ghostRect.MidY + 4f, SKTextAlign.Center, _ghostFont, ghostTextPaint);
         }
     }
+
 
     // ======771,831==================================================================
 
@@ -1784,6 +1827,23 @@ public class SkiaMapperControl : SKControl {
                         }
                     }
                 }
+
+                // --- 3. SOURCE HEADER BUTTONS INTERCEPT (View & Ellipsis) ---
+                if (sourceFileViewRect.Contains(e.X, e.Y)) {
+                    if (!string.IsNullOrEmpty(MainForm.SourcePath) && System.IO.File.Exists(MainForm.SourcePath)) {
+                        try {
+                            var viewerForm = new SkiaMapper.Forms.OutputViewerForm(MainForm.SourcePath);
+                            viewerForm.Show(this); // Non-modal window linked to parent
+                            LogMessage($"Opened source file viewer: {MainForm.SourcePath}");
+                        } catch (Exception ex) {
+                            LogMessage($"Failed to open source file viewer: {ex.Message}");
+                        }
+                    } else {
+                        MessageBox.Show("Source file path is not set or file does not exist.", "File Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    return;
+                }
+
                 if (sourceFileEllipsisRect.Contains(e.X, e.Y)) {
                     using var ofd = new OpenFileDialog {
                         Filter = "Any extension |*.*",
@@ -1801,8 +1861,7 @@ public class SkiaMapperControl : SKControl {
                         contextTargetConnection = null;
                         switch (Path.GetExtension(ofd.FileName).ToLower()) {
                             case ".edi":
-                            case ".txt": // Add any other non-xml raw EDI extensions you support here
-                                         // attempt to parse to xml 
+                            case ".txt":
                                 X12Parser parser = new X12Parser();
                                 using (Stream reader = new FileStream(ofd.FileName, FileMode.Open, FileAccess.Read)) {
                                     List<Interchange> interchanges = parser.ParseMultiple(reader);
@@ -1813,17 +1872,12 @@ public class SkiaMapperControl : SKControl {
                                     MainForm.SourcePath = ofd.FileName;
                                 }
                                 break;
-
                             case ".xml":
                             case ".xsd":
-                                // Already XML, handle accordingly or leave empty if no action needed
                                 break;
-
                             default:
-                                // Handle unknown extensions or fallback logic if necessary
                                 break;
                         }
-
 
                         try {  // 2. Reload and reparse the source schema tree using MainForm's parser
                             this.SourceRoot = MainForm.LoadSchemaFromFile(ofd.FileName);
@@ -1843,7 +1897,22 @@ public class SkiaMapperControl : SKControl {
                     return;
                 }
 
-                // Priority Intercept: Destination File Ellipsis Picker Button (...)
+                // --- 4. DESTINATION HEADER BUTTONS INTERCEPT (View & Ellipsis) ---
+                if (destinationFileViewRect.Contains(e.X, e.Y)) {
+                    if (!string.IsNullOrEmpty(MainForm.DestinationPath) && System.IO.File.Exists(MainForm.DestinationPath)) {
+                        try {
+                            var viewerForm = new SkiaMapper.Forms.OutputViewerForm(MainForm.DestinationPath);
+                            viewerForm.Show(this); // Non-modal window linked to parent
+                            LogMessage($"Opened destination file viewer: {MainForm.DestinationPath}");
+                        } catch (Exception ex) {
+                            LogMessage($"Failed to open destination file viewer: {ex.Message}");
+                        }
+                    } else {
+                        MessageBox.Show("Destination file path is not set or file does not exist.", "File Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    return;
+                }
+
                 if (destinationFileEllipsisRect.Contains(e.X, e.Y)) {
                     using var ofd = new OpenFileDialog {
                         Filter = "XML Files (*.xml)|*.xml|All Files (*.*)|*.*",
@@ -1883,28 +1952,28 @@ public class SkiaMapperControl : SKControl {
                     return;
                 }
 
-                // 1. Priority Intercept: Tool Palette Floating Overlay Window
+                // 5. Priority Intercept: Tool Palette Floating Overlay Window
                 if (paletteBounds.Contains(e.X, e.Y)) {
                     ProcessLeftClickToolPalette(e);
                     return;
                 }
 
-                // 2. Priority Intercept: Canvas Interactive Functoid Instances
+                // 6. Priority Intercept: Canvas Interactive Functoid Instances
                 if (e.X > centerLeft && e.X < centerRight && e.Y < mainContentHeight) {
                     if (ProcessLeftClickCanvasFunctoids(e, centerLeft)) return;
                 }
 
-                // 3. Priority Intercept: Source Schema Tree Panel Nodes
+                // 7. Priority Intercept: Source Schema Tree Panel Nodes
                 if (e.X < leftTreeWidth && e.Y < mainContentHeight && SourceRoot != null) {
                     if (ProcessLeftClickSourceTree(e)) return;
                 }
 
-                // 4. Priority Intercept: Resizing UI Layout Splitter Slices
+                // 8. Priority Intercept: Resizing UI Layout Splitter Slices
                 if (ProcessLeftClickLayoutSplitters(e, mainContentHeight, centerLeft, centerRight)) {
                     return;
                 }
 
-                // 5. Fallback: Edge-Wire Connection Trace Intersection Selection
+                // 9. Fallback: Edge-Wire Connection Trace Intersection Selection
                 ProcessLeftClickWireSelection(e);
                 break;
 
