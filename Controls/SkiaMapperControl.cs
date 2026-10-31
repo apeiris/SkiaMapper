@@ -26,6 +26,13 @@ public class SkiaMapperControl : SKControl {
         RightPanel,
         LogPanel
     }
+    private readonly List<string> logMessages = new();
+
+    public void LogMessage(string message) {
+        logMessages.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
+        if (logMessages.Count > 100) logMessages.RemoveAt(0); // Keep last 100 entries
+        Invalidate();
+    }
 
     // Source and Destination Tree Virtual Scroll State
     private float sourceVirtualScrollY = 0f;
@@ -749,9 +756,23 @@ public class SkiaMapperControl : SKControl {
         }
 
 
+ 
         // --- Log Panel ---
-        bgPaint.Color = new SKColor(30, 30, 30);
+    
+
+        bgPaint.Color = SKColors.Black; // Solid black background
         canvas.DrawRect(0, mainContentHeight, w, logPanelHeight, bgPaint);
+
+        using var logFont = new SKFont(SKTypeface.FromFamilyName("Consolas", SKFontStyleWeight.Normal, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f);
+        using var logTextPaint = new SKPaint { Color = SKColors.Lime, IsAntialias = true }; // Bright green text
+
+        float logY = mainContentHeight + 18f;
+        foreach (var msg in logMessages.TakeLast(5)) { // Render recent messages
+            canvas.DrawText(msg, 12f, logY, logFont, logTextPaint);
+            logY += 18f;
+        }
+
+
 
 
         // 2. Draw Floating Tool Palette Window
@@ -1474,9 +1495,24 @@ public class SkiaMapperControl : SKControl {
                     return;
 
                 case var loc when saveBtnRect.Contains(loc.X, loc.Y):
-                    using (var sfd = new SaveFileDialog { Filter = "XML Files (*.xml)|*.xml", DefaultExt = "xml", AddExtension = true, Title = "Save Mapping Schema" }) {
+                    logMessages.Clear();
+                    using (var sfd = new SaveFileDialog { Filter = "Mapping Files (*.xslt)|*.xslt", DefaultExt = "xslt", AddExtension = true, Title = "Save Mapping Project & Schemas",FileName =  MainForm.XsltPath }) {
                         if (sfd.ShowDialog() == DialogResult.OK) {
-                            System.IO.File.WriteAllText(sfd.FileName, SaveConfiguration());
+                            var state = new MappingProjectState {
+                                SourceSchemaPath = MainForm.SourcePath,
+                                DestinationSchemaPath = MainForm.DestinationPath,
+                                ActiveFunctoids = this.ActiveFunctoids.ToList(),
+                                Connections = this.Connections.ToList()
+                            };
+
+                            var serializer = new XmlSerializer(typeof(MappingProjectState));
+                            using var writer = new StreamWriter(sfd.FileName);
+                            serializer.Serialize(writer, state);
+                           
+                            LogMessage($"Saved Mapping XSLT: {sfd.FileName}");
+                            LogMessage($"Source Schema: {MainForm.SourcePath}");
+                            LogMessage($"Destination Schema: {MainForm.DestinationPath}");
+
                             isCanvasDirty = false;
                             Invalidate();
                         }
@@ -2324,6 +2360,7 @@ public class SkiaMapperControl : SKControl {
         return stringWriter.ToString();
     }
     #region LoadConfiguration with Robust Rehydration and State Synchronization
+
     public void LoadConfiguration(string xmlContent) {
         if (string.IsNullOrWhiteSpace(xmlContent)) return;
         try {
@@ -2335,26 +2372,32 @@ public class SkiaMapperControl : SKControl {
                 this.ActiveFunctoids.Clear();
                 this.Connections.Clear();
 
-                // 2. Rehydrate Active Functoids into the ObservableCollection
+                // 2. Rehydrate Source and Destination Schemas if paths exist
+                if (!string.IsNullOrEmpty(loadedState.SourceSchemaPath) && System.IO.File.Exists(loadedState.SourceSchemaPath)) {
+                    MainForm.SourcePath = loadedState.SourceSchemaPath;
+                    this.SourceRoot = MainForm.LoadSchemaFromFile(loadedState.SourceSchemaPath);
+                }
+
+                if (!string.IsNullOrEmpty(loadedState.DestinationSchemaPath) && System.IO.File.Exists(loadedState.DestinationSchemaPath)) {
+                    MainForm.DestinationPath = loadedState.DestinationSchemaPath;
+                    this.DestinationRoot = MainForm.LoadSchemaFromFile(loadedState.DestinationSchemaPath);
+                }
+
+                // 3. Rehydrate Active Functoids
                 if (loadedState.ActiveFunctoids != null) {
                     foreach (var functoid in loadedState.ActiveFunctoids) {
                         this.ActiveFunctoids.Add(functoid);
                     }
                 }
 
-                // 3. Rehydrate Map Connections into the ObservableCollection
+                // 4. Rehydrate Map Connections
                 if (loadedState.Connections != null) {
-                    // NOTE: The legacy index synchronization loops have been removed. 
-                    // InputIndex handles serialization and tracking natively now.
                     foreach (var connection in loadedState.Connections) {
                         this.Connections.Add(connection);
                     }
                 }
 
-                // 4. Reset modified state flags and force a workspace UI redraw
                 this.isCanvasDirty = false;
-
-                // Force SkiaSharp to repaint the newly hydrated layout elements immediately
                 this.Invalidate();
             }
         } catch (Exception ex) {
@@ -2362,6 +2405,7 @@ public class SkiaMapperControl : SKControl {
             throw;
         }
     }
+
     #endregion LoadConfiguration 1795
 
     private bool TryToggleNodeExpansion(SchemaNode node, float contentMouseY, float mouseX, float treeLeftX, int currentDepth, ref float currentY) {
