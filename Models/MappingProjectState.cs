@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Xml.Serialization;
 
 namespace SkiaMapper.Models {
@@ -7,6 +6,12 @@ namespace SkiaMapper.Models {
     public class MappingProjectState {
         [XmlAttribute("Version")]
         public string Version { get; set; } = "1.0";
+
+        [XmlElement("SourceSchemaPath")]
+        public string SourceSchemaPath { get; set; } = string.Empty;
+
+        [XmlElement("DestinationSchemaPath")]
+        public string DestinationSchemaPath { get; set; } = string.Empty;
 
         [XmlArray("ActiveFunctoids")]
         [XmlArrayItem("FunctoidInstance")]
