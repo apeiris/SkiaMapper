@@ -1,73 +1,97 @@
-﻿using SkiaMapper.Controls;
+﻿using ICSharpCode.TextEditor;
+using SkiaMapper.Controls;
 using SkiaMapper.Models;
 using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace SkiaMapper.Forms {
-    public class ScriptEditorDialog : Form {
-        private TextBox txtScript;
-        private TextBox txtMethodName;
-        private Button btnSave;
-        private Button btnCancel;
-        private FunctoidInstance _instance;
-        private SkiaMapperControl _mapperControl; // Added field to hold the live control reference
+namespace SkiaMapper.Forms;
 
-        // REVISED CONSTRUCTOR: Accepts the active mapper control parent instance
-        public ScriptEditorDialog(FunctoidInstance instance, SkiaMapperControl mapperControl) {
-            _instance = instance;
-            _mapperControl = mapperControl; // Store reference
-            InitializeComponent();
+public class ScriptEditorDialog : Form {
+    private TextEditorControl textEditor;
+    private Button btnSave;
+    private Button btnCancel;
+    private FunctoidInstance targetInstance;
+    private SkiaMapperControl parentControl;
 
-            // Automatically binds the pre-built template script or custom modifications cleanly
-            txtScript?.Text = !string.IsNullOrWhiteSpace(instance.CustomScriptBody)
-                ? instance.CustomScriptBody
-                : "// No default script asset could be compiled.";
+    public ScriptEditorDialog(FunctoidInstance instance, SkiaMapperControl control) {
+        targetInstance = instance;
+        targetInstance = instance;
+        parentControl = control;
 
-            txtMethodName?.Text = !string.IsNullOrWhiteSpace(instance.CustomMethodName)
-                ? instance.CustomMethodName
-                : "TransformMethod";
-        }
+        Text = $"Configure Script Block: {instance.CustomMethodName}";
+        Width = 700;
+        Height = 500;
+        StartPosition = FormStartPosition.CenterParent;
 
-        private void InitializeComponent() {
-            this.Text = $"Edit Script Context - {_instance.Definition?.Name}";
-            this.Size = new Size(600, 450);
-            this.FormBorderStyle = FormBorderStyle.SizableToolWindow;
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.MinimumSize = new Size(400, 300);
+        // 1. Initialize ICSharpCode TextEditorControl
+        textEditor = new TextEditorControl {
+            Dock = DockStyle.Fill,
+            Text = instance.CustomScriptBody ?? string.Empty
+        };
 
-            // Method Name Label & Input
-            Label lblMethod = new Label { Text = "Target Method Name:", Location = new Point(12, 15), Size = new Size(130, 20) };
-            txtMethodName = new TextBox { Location = new Point(145, 12), Size = new Size(427, 23), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        // Enable line numbers and show matching brackets
+        textEditor.ShowLineNumbers = true;
+        textEditor.IsReadOnly = false;
 
-            // Script Body Label & Textbox
-            Label lblScript = new Label { Text = "C# Source Body Code:", Location = new Point(12, 45), Size = new Size(130, 20) };
-            txtScript = new TextBox {
-                Location = new Point(12, 68),
-                Size = new Size(560, 280),
-                Multiline = true,
-                ScrollBars = ScrollBars.Both,
-                Font = new Font("Consolas", 10F, FontStyle.Regular),
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
-            };
+        // 2. Set Syntax Highlighting to C#
+        textEditor.Document.HighlightingStrategy =
+            ICSharpCode.TextEditor.Document.HighlightingStrategyFactory.CreateHighlightingStrategy("C#");
 
-            // Buttons Actions Laydown
-            btnSave = new Button { Text = "Save Changes", DialogResult = DialogResult.OK, Location = new Point(415, 365), Size = new Size(110, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
-            btnCancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Location = new Point(300, 365), Size = new Size(100, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
+        // 3. Add Custom Context Menu Items (similar to your canvas setup)
+        var editorContextMenu = textEditor.ContextMenuStrip ?? new ContextMenuStrip();
 
-            btnSave.Click += (s, e) => {
-                _instance.CustomScriptBody = txtScript.Text;
-                _instance.CustomMethodName = txtMethodName.Text;
+        var formatScriptItem = new ToolStripMenuItem("Format Script Block");
+        formatScriptItem.Click += FormatScriptItem_Click;
+        editorContextMenu.Items.Add(formatScriptItem);
 
-                // FIXED: Execute the modification parser against the parent instance context
-                if (_mapperControl != null) {
-                    _mapperControl.OnFunctoidScriptModified(_instance);
-                }
+        textEditor.ContextMenuStrip = editorContextMenu;
 
-                this.Close();
-            };
+        // 4. Bottom Action Panel
+        var panelBottom = new Panel {
+            Dock = DockStyle.Bottom,
+            Height = 45,
+            BackColor = Color.FromArgb(240, 243, 248)
+        };
 
-            this.Controls.AddRange(new Control[] { lblMethod, txtMethodName, lblScript, txtScript, btnSave, btnCancel });
-        }
+        btnSave = new Button {
+            Text = "Save & Apply",
+            DialogResult = DialogResult.OK,
+            Width = 100,
+            Height = 30,
+            Location = new Point(Width - 220, 8)
+        };
+        btnSave.Click += BtnSave_Click;
+
+        btnCancel = new Button {
+            Text = "Cancel",
+            DialogResult = DialogResult.Cancel,
+            Width = 90,
+            Height = 30,
+            Location = new Point(Width - 110, 8)
+        };
+
+        panelBottom.Controls.Add(btnSave);
+        panelBottom.Controls.Add(btnCancel);
+
+        // Add controls to form
+        Controls.Add(textEditor);
+        Controls.Add(panelBottom);
+    }
+
+    private void FormatScriptItem_Click(object? sender, EventArgs e) {
+        // Optional quick formatting action logic
+        MessageBox.Show(this, "Script formatting helper invoked.", "Format Script", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void BtnSave_Click(object? sender, EventArgs e) {
+        // Save the updated script text back to the functoid instance
+        targetInstance.CustomScriptBody = textEditor.Text;
+        //targetInstance.IsScriptCustomized = true;
+
+        // Notify the parent canvas control to re-analyze and redraw
+        parentControl.OnFunctoidScriptModified(targetInstance);
+        DialogResult = DialogResult.OK;
+        Close();
     }
 }

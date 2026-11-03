@@ -85,14 +85,14 @@
       ]]>
 		</ScriptTemplate>
 	</Functoid>
-<Functoid name="If" catId="3" Id="300">
+	<Functoid name="CheckEqual" catId="3" Id="300">
 		<MethodNameFormat>({0},{1})</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
-public string If(string condition="ST",string trueValue="" ) {
-    bool isTrue = !string.IsNullOrEmpty(condition) && condition.Trim().Equals("ST", StringComparison.OrdinalIgnoreCase);
-    return isTrue ? trueValue : string.Empty;
-}
+            public bool CheckEqual(string valueToCompare, string constantValue)  {
+                if (string.IsNullOrEmpty(valueToCompare))           return false;
+                return valueToCompare.Trim().Equals(constantValue, StringComparison.OrdinalIgnoreCase);
+        }
       ]]>
 		</ScriptTemplate>
 	</Functoid>
@@ -266,8 +266,94 @@ public string GetBillToByIsa06(string isa05, string isa06) {
 		<MethodNameFormat>Looping({0})</MethodNameFormat>
 		<ScriptTemplate>
 			<![CDATA[
-      public string Looping(string loopPath) {
-          return loopPath ?? string.Empty;
+     public string Looping(string loopItemValue) {
+    // Acts as a pass-through guard during the xsl:for-each iteration
+    return string.IsNullOrWhiteSpace(loopItemValue) ? string.Empty : loopItemValue.Trim();
+}
+      ]]>
+		</ScriptTemplate>
+	</Functoid>
+
+	<!-- Advanced / Looping -->
+	<Functoid name="CreateNode" catId="8" Id="810">
+		<MethodNameFormat>CreateNode({0},{1})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+   public string CreateNode(string N101, string N102, string N103, string N104,
+                         string N301,
+                         string N401, string N402, string N403, string N404,
+                         string targetType) 
+{
+    // Clean and determine the tag name based on the N101 qualifier
+    string rawCode = N101?.Trim().ToUpper() ?? string.Empty;
+    string nodeName = rawCode switch {
+        "ST" => "ShipTo",
+        "BT" or "BY" => "BillTo",
+        "VT" => "Vendor",
+        _ => targetType // Fallback to destination expectation if needed
+    };
+
+    string FormatElement(string tag, string val) =>
+        string.IsNullOrWhiteSpace(val) ? string.Empty : $"<{tag}>{System.Net.WebUtility.HtmlEncode(val.Trim())}</{tag}>";
+
+    // Build and return the populated element fragment
+    return $"<{nodeName}>" +
+        FormatElement("IDCode", N101) +
+        FormatElement("Name", N102) +
+        FormatElement("GLN", N103) +
+        FormatElement("GLNCode", N104) +
+        FormatElement("Address1", N301) +
+        FormatElement("City", N401) +
+        FormatElement("StateProvince", N402) +
+        FormatElement("PostalCode", N403) +
+        FormatElement("CountryCode", N404) +
+        $"</{nodeName}>";
+}
+      ]]>
+		</ScriptTemplate>
+		
+	</Functoid>
+	<Functoid name="vmShipTo" catId="8" Id="820">
+		<MethodNameFormat>vmShipTo({0},{1})</MethodNameFormat>
+		<ScriptTemplate><![CDATA[
+        public string vmShipTo(bool condition, string valueToMap) {
+		// If the logical condition is true and the value is not empty, output the value.
+		// Otherwise, return string.Empty to completely suppress the node.
+		if (condition && !string.IsNullOrWhiteSpace(valueToMap)) {
+		return valueToMap;
+		}
+		return string.Empty;
+		}
+		]]>
+	</ScriptTemplate>
+	</Functoid>
+	<Functoid name="vmBillTo" catId="8" Id="830">
+		<MethodNameFormat>vmBillTo({0},{1})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+        public string vmBillTo(bool condition, string valueToMap) {
+		// If the logical condition is true and the value is not empty, output the value.
+		// Otherwise, return string.Empty to completely suppress the node.
+		if (condition && !string.IsNullOrWhiteSpace(valueToMap)) {
+		return valueToMap;
+		}
+		return string.Empty;
+		}
+		]]>
+		</ScriptTemplate>
+	</Functoid>
+	<Functoid name="FilterAddress" catId="8" Id="840">
+		<MethodNameFormat>FilterAddress({0}, {1}, {2}, {3}, {4}, {5}, {6})</MethodNameFormat>
+		<ScriptTemplate>
+			<![CDATA[
+      public string FilterAddress(string n101, string n102, string n301, string n401, string n402, string n403, string targetQualifier) {
+          if (string.Equals(n101?.Trim(), targetQualifier?.Trim(), StringComparison.OrdinalIgnoreCase)) {
+              var parts = new[] { n102, n301, n401, $"{n402} {n403}" }
+                          .Where(p => !string.IsNullOrWhiteSpace(p))
+                          .Select(p => p.Trim());
+              return string.Join(", ", parts);
+          }
+          return string.Empty;
       }
       ]]>
 		</ScriptTemplate>
