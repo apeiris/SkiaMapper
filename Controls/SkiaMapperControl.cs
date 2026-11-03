@@ -254,8 +254,35 @@ public class SkiaMapperControl : SKControl {
     private void OnCanvasStructureChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) {
         isCanvasDirty = true;
     }
+
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
         float mainContentHeight = Height - logPanelHeight;
+        float centerLeft = leftTreeWidth;
+        float centerRight = Width - rightTreeWidth;
+
+        // 0. Check if mouse is over any active functoid in the middle panel for resizing
+        if (e.X >= centerLeft && e.X <= centerRight && e.Y < mainContentHeight) {
+            FunctoidInstance? hoveredFunctoid = ActiveFunctoids.LastOrDefault(f => {
+                float absX = centerLeft + f.X;
+                return e.X >= absX && e.X <= absX + f.Width &&
+                       e.Y >= f.Y && e.Y <= f.Y + f.Height;
+            });
+
+            if (hoveredFunctoid != null) {
+                // Determine scaling factor based on wheel direction (scroll up vs. down)
+                float scaleFactor = e.Delta > 0 ? 1.05f : 0.95f;
+
+                // Apply scaling with safe minimum and maximum boundary constraints
+                float newWidth = Math.Clamp(hoveredFunctoid.Width * scaleFactor, 80f, 300f);
+                float newHeight = Math.Clamp(hoveredFunctoid.Height * scaleFactor, 40f, 150f);
+
+                hoveredFunctoid.Width = newWidth;
+                hoveredFunctoid.Height = newHeight;
+
+                Invalidate();
+                return;
+            }
+        }
 
         // 1. Toolbox Scroll
         if (isPaletteExpanded && paletteBounds.Contains(e.X, e.Y)) {
@@ -1490,6 +1517,30 @@ public class SkiaMapperControl : SKControl {
         return false;
     }
 
+
+    //public void HandleMouseWheel(SKPoint canvasPoint, int delta) {
+    //    // 1. Find the topmost functoid instance under the mouse cursor
+    //    // (Searching in reverse order ensures you hit the topmost drawn element if they overlap)
+    //    FunctoidInstance hoveredFunctoid = FunctoidInstances.LastOrDefault(f =>
+    //        canvasPoint.X >= f.X && canvasPoint.X <= f.X + f.Width &&
+    //        canvasPoint.Y >= f.Y && canvasPoint.Y <= f.Y + f.Height
+    //    );
+
+    //    if (hoveredFunctoid != null) {
+    //        // 2. Determine scaling factor based on wheel direction (scroll up vs. down)
+    //        float scaleFactor = delta > 0 ? 1.05f : 0.95f;
+
+    //        // 3. Apply scaling with safe minimum and maximum boundary constraints
+    //        float newWidth = Math.Clamp(hoveredFunctoid.Width * scaleFactor, 80f, 300f);
+    //        float newHeight = Math.Clamp(hoveredFunctoid.Height * scaleFactor, 40f, 150f);
+
+    //        hoveredFunctoid.Width = newWidth;
+    //        hoveredFunctoid.Height = newHeight;
+
+    //        // 4. Request canvas repaint to reflect the new dimensions
+    //        InvalidateSurface();
+    //    }
+    //}
     #region  Modularized MouseDown  Intercept Engine Block Helpers
     private void ProcessLeftClickToolPalette(MouseEventArgs e) {
         var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
@@ -2432,34 +2483,31 @@ public class SkiaMapperControl : SKControl {
 
     public void LoadConfiguration(string xmlContent) {
         if (string.IsNullOrWhiteSpace(xmlContent)) return;
+
+        // Guard against accidentally loading an XSLT or wrong file type
+        if (xmlContent.Contains("stylesheet") || xmlContent.Contains("xsl:")) {
+            MessageBox.Show(
+                "The selected file is an XSLT stylesheet, not a mapping project state file (.xml). Please use the XSLT selector button to change stylesheets.",
+                "Invalid File Format",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning
+            );
+            return;
+        }
+
         try {
             var serializer = new XmlSerializer(typeof(MappingProjectState));
             using var stringReader = new StringReader(xmlContent);
             if (serializer.Deserialize(stringReader) is MappingProjectState loadedState) {
-
-                // 1. Clear existing workspace layout records
                 this.ActiveFunctoids.Clear();
                 this.Connections.Clear();
 
-                // 2. Rehydrate Source and Destination Schemas if paths exist
-                if (!string.IsNullOrEmpty(loadedState.SourceSchemaPath) && System.IO.File.Exists(loadedState.SourceSchemaPath)) {
-                    MainForm.SourcePath = loadedState.SourceSchemaPath;
-                    this.SourceRoot = MainForm.LoadSchemaFromFile(loadedState.SourceSchemaPath);
-                }
-
-                if (!string.IsNullOrEmpty(loadedState.DestinationSchemaPath) && System.IO.File.Exists(loadedState.DestinationSchemaPath)) {
-                    MainForm.DestinationPath = loadedState.DestinationSchemaPath;
-                    this.DestinationRoot = MainForm.LoadSchemaFromFile(loadedState.DestinationSchemaPath);
-                }
-
-                // 3. Rehydrate Active Functoids
                 if (loadedState.ActiveFunctoids != null) {
                     foreach (var functoid in loadedState.ActiveFunctoids) {
                         this.ActiveFunctoids.Add(functoid);
                     }
                 }
 
-                // 4. Rehydrate Map Connections
                 if (loadedState.Connections != null) {
                     foreach (var connection in loadedState.Connections) {
                         this.Connections.Add(connection);

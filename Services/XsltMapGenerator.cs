@@ -1,7 +1,7 @@
 ﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using SkiaMapper.Models; // Maps your ConnectionEndpoint and FunctoidInstance models
+using SkiaMapper.Models;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -19,8 +19,8 @@ namespace SkiaMapper.Services {
     public class XsltMapGenerator {
         private readonly ObservableCollection<FunctoidInstance> _activeFunctoids;
         private readonly ObservableCollection<MappingConnection> _connections;
-        // Tracks dynamic fallback parameters globally indexed by [FunctoidInstanceId -> [ParamSlotIndex -> StringLiteralValue]]
         private readonly Dictionary<Guid, Dictionary<int, string>> _instanceFallbackParameterCache;
+
         public XsltMapGenerator(
             ObservableCollection<FunctoidInstance> activeFunctoids,
             ObservableCollection<MappingConnection> connections) {
@@ -28,6 +28,7 @@ namespace SkiaMapper.Services {
             _connections = connections ?? throw new ArgumentNullException(nameof(connections));
             _instanceFallbackParameterCache = new Dictionary<Guid, Dictionary<int, string>>();
         }
+
         public void GenerateAndSaveMap() {
             if (_connections.Count == 0) {
                 MessageBox.Show("The workspace canvas contains no connections to compile.", "XSLT Engine Notice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -43,6 +44,15 @@ namespace SkiaMapper.Services {
                 MessageBox.Show($"XSLT generation failed:\n{ex.Message}", "Pipeline Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        /// <summary>
+        /// Public helper to retrieve the raw compiled XSLT payload string for file bundling.
+        /// </summary>
+        public string CompileXsltPayloadPublic() {
+            _instanceFallbackParameterCache.Clear();
+            return CompileXsltPayload();
+        }
+
         public object BuildDynamicExtensionObject() {
             var codeBuilder = new StringBuilder();
             codeBuilder.AppendLine("using System;");
@@ -97,21 +107,21 @@ namespace SkiaMapper.Services {
             codeBuilder.AppendLine("    }");
             codeBuilder.AppendLine("}");
 
-            // Parse C# syntax tree
             SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(codeBuilder.ToString());
 
             var references = new MetadataReference[]
-             {
-        MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
-        MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location),
-        MetadataReference.CreateFromFile(typeof(System.Data.DataRow).Assembly.Location),
-        MetadataReference.CreateFromFile(typeof(Microsoft.Data.SqlClient.SqlConnection).Assembly.Location),
-        MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
-        MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.Primitives").Location),
-        MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.TypeConverter").Location), // Required for DataTable components
-        MetadataReference.CreateFromFile(Assembly.Load("System.Xml.ReaderWriter").Location), // Required for dt.WriteXml / XmlWriter
-        MetadataReference.CreateFromFile(Assembly.Load("System.Private.Xml").Location) // Required for DataTable serialization XML writing
-             };
+            {
+                MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(Enumerable).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(System.Data.DataRow).Assembly.Location),
+                MetadataReference.CreateFromFile(typeof(Microsoft.Data.SqlClient.SqlConnection).Assembly.Location),
+                MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
+                MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.Primitives").Location),
+                MetadataReference.CreateFromFile(Assembly.Load("System.ComponentModel.TypeConverter").Location),
+                MetadataReference.CreateFromFile(Assembly.Load("System.Xml.ReaderWriter").Location),
+                MetadataReference.CreateFromFile(Assembly.Load("System.Private.Xml").Location)
+            };
+
             var compilation = CSharpCompilation.Create(
                 $"FunctoidAssembly_{Guid.NewGuid():N}",
                 new[] { syntaxTree },
@@ -134,35 +144,6 @@ namespace SkiaMapper.Services {
             Type type = assembly.GetType("SkiaMapper.Dynamic.FunctoidExtension")!;
             return Activator.CreateInstance(type)!;
         }
-        public object BuildDynamicFunctoidExtensionObject() {
-            var scriptCode = new StringBuilder();
-            scriptCode.AppendLine("using System;");
-            scriptCode.AppendLine("namespace SkiaMapper.Dynamic {");
-            scriptCode.AppendLine("    public class FunctoidExtension {");
-
-            // Reuse your existing Phase 1 Roslyn logic here to sanitize methods, 
-            // but append them into scriptCode instead of the XSLT StringBuilder.
-
-            scriptCode.AppendLine("    }");
-            scriptCode.AppendLine("}");
-
-            // Compile into in-memory assembly
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(scriptCode.ToString());
-            var references = new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) };
-            var compilation = CSharpCompilation.Create("FunctoidAssembly", new[] { tree }, references,
-                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-
-            using var ms = new MemoryStream();
-            var emitResult = compilation.Emit(ms);
-            if (!emitResult.Success) {
-                throw new InvalidOperationException("Failed to compile functoid scripts.");
-            }
-
-            ms.Seek(0, SeekOrigin.Begin);
-            var assembly = System.Reflection.Assembly.Load(ms.ToArray());
-            var type = assembly.GetType("SkiaMapper.Dynamic.FunctoidExtension")!;
-            return Activator.CreateInstance(type)!;
-        }
 
         private string CompileXsltPayload() {
             var sb = new StringBuilder();
@@ -171,7 +152,6 @@ namespace SkiaMapper.Services {
             sb.AppendLine("                xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"");
             sb.AppendLine("                xmlns:user=\"urn:my-scripts\"");
 
-            // --- DYNAMICALLY DETECT AND REGISTER NAMESPACE PREFIXES ---
             var discoveredPrefixes = new HashSet<string>();
             foreach (var conn in _connections) {
                 if (conn.Source?.NodePath != null && conn.Source.NodePath.Contains(':')) {
@@ -198,7 +178,6 @@ namespace SkiaMapper.Services {
                 .Where(c => c.Target != null && c.Target.Type == ConnectionEndpointType.DestinationNode)
                 .ToList();
 
-            // Build hierarchical tree structure from paths like "po/billto/a1"
             var rootNode = new XsltTreeNode { Name = "Root" };
             foreach (var connection in terminalConnections) {
                 string path = connection.Target.NodePath;
@@ -218,9 +197,6 @@ namespace SkiaMapper.Services {
                 string sourceExpr = TraceSourceEndpoint(connection.Source, out bool isFunctoidCall);
                 currentNode.ValueExpression = sourceExpr;
 
-
-
-                // --- DYNAMIC CONTAINER LOOP DETECTION ---
                 if (path.Contains("Loop") || (connection.Source != null && connection.Source.NodePath != null && connection.Source.NodePath.Contains("Loop"))) {
                     string rawPath = string.Empty;
 
@@ -231,7 +207,6 @@ namespace SkiaMapper.Services {
                         if (srcFunctoid != null && srcFunctoid.Definition?.Name == "Looping") {
                             rawPath = GetLoopingFunctoidRawPath(srcFunctoid.Id);
                         } else {
-                            // Fallback: grab the first source node path feeding this functoid
                             var firstInputWire = _connections.FirstOrDefault(c => c.Target?.FunctoidInstanceId == srcFunctoid?.Id && c.Source?.NodePath != null);
                             if (firstInputWire?.Source != null) {
                                 rawPath = $"//{ToValidXPath(firstInputWire.Source.NodePath)}";
@@ -240,7 +215,6 @@ namespace SkiaMapper.Services {
                     }
 
                     if (!string.IsNullOrEmpty(rawPath)) {
-                        // Isolate the Loop container element, e.g. //Loop[@LoopId='N1']
                         int loopIndex = rawPath.LastIndexOf("Loop[@LoopId");
                         if (loopIndex >= 0) {
                             int closingBracket = rawPath.IndexOf(']', loopIndex);
@@ -251,11 +225,8 @@ namespace SkiaMapper.Services {
                         currentNode.LoopSourcePath = rawPath;
                     }
                 }
-
-
             }
 
-            // Recursively render the nested XML structure into the XSLT template
             foreach (var child in rootNode.Children.Values) {
                 RenderNodeRecursive(child, sb, 2, null);
             }
@@ -265,8 +236,8 @@ namespace SkiaMapper.Services {
 
             return sb.ToString();
         }
+
         private string GetLoopingFunctoidRawPath(Guid functoidId) {
-            // Find the wire plugging into input slot 0 of this Looping functoid
             var incomingWire = _connections.FirstOrDefault(c =>
                 c.Target?.Type == ConnectionEndpointType.Functoid &&
                 c.Target.FunctoidInstanceId == functoidId &&
@@ -280,38 +251,9 @@ namespace SkiaMapper.Services {
             return string.Empty;
         }
 
-      
-        private string ExtractGenericLoopExpression(string sourceExpr) {
-            if (string.IsNullOrEmpty(sourceExpr)) return string.Empty;
-
-            // If the expression points to a loop containing [@LoopId='...'], 
-            // truncate at the closing bracket to isolate the collection selector (e.g., //Loop[@LoopId='PO1'])
-            int bracketIndex = sourceExpr.IndexOf("]");
-            if (bracketIndex > 0) {
-                return sourceExpr.Substring(0, bracketIndex + 1);
-            }
-
-            // Fallback: strip the leaf segment if it's a standard path
-            int lastSlash = sourceExpr.LastIndexOf('/');
-            if (lastSlash > 0) {
-                return sourceExpr.Substring(0, lastSlash);
-            }
-
-            return sourceExpr;
-        }
-        private string ExtractParentLoopExpression(string sourceExpr) {
-            // If the source expression targets a specific field inside a loop (e.g. //Loop[@LoopId='PO1']/PO1/PO101),
-            // strip the leaf segment to get the repeating container query (e.g. //Loop[@LoopId='PO1'])
-            int lastSlash = sourceExpr.LastIndexOf('/');
-            if (lastSlash > 0 && !sourceExpr.EndsWith("]")) {
-                return sourceExpr.Substring(0, lastSlash);
-            }
-            return sourceExpr;
-        }
         private void RenderNodeRecursive(XsltTreeNode node, StringBuilder sb, int indentLevel, string activeLoopPath = null) {
             string indent = new string(' ', indentLevel * 2);
 
-            // Check if this node introduces a new loop
             bool hasLoop = !string.IsNullOrEmpty(node.LoopSourcePath);
             string currentLoopPath = hasLoop ? node.LoopSourcePath : activeLoopPath;
 
@@ -332,7 +274,6 @@ namespace SkiaMapper.Services {
                 return;
             }
 
-            // --- BIZTALK-STYLE <xsl:for-each> RENDERING ---
             if (hasLoop) {
                 sb.AppendLine($"{indent}<xsl:for-each select=\"{node.LoopSourcePath}\">");
                 indentLevel++;
@@ -352,7 +293,6 @@ namespace SkiaMapper.Services {
                         }
                     }
 
-                    // Automatically enable disable-output-escaping for function/lookup calls returning XML strings
                     bool isFunctionCall = expr.Contains("(");
                     string doeAttr = isFunctionCall ? " disable-output-escaping=\"yes\"" : "";
 
@@ -382,18 +322,16 @@ namespace SkiaMapper.Services {
                 sb.AppendLine($"{indent}</xsl:for-each>");
             }
         }
+
         private class XsltTreeNode {
             public string Name { get; set; } = "";
             public bool IsAttribute { get; set; } = false;
             public Dictionary<string, XsltTreeNode> Children { get; } = new Dictionary<string, XsltTreeNode>();
             public string? ValueExpression { get; set; }
-            public string? LoopSourcePath { get; set; } // <--- Added for BizTalk-style looping
+            public string? LoopSourcePath { get; set; }
         }
-        /// <summary>
-        /// Recursively walks the canvas graph topology backward to compile properly formatted 
-        /// nested function arguments, accounting for literal parameter fallbacks and missing connection slots.
-        /// </summary>
-        private string TraceSourceEndpoint(ConnectionEndpoint source, out bool isFunctoidCall) {
+
+        private string TraceSourceEndpoint(ConnectionEndpoint source, out bool isFunctoidCall, string activeQualifier = null) {
             isFunctoidCall = false;
             if (source == null) return string.Empty;
 
@@ -408,6 +346,12 @@ namespace SkiaMapper.Services {
                                 c.Target.FunctoidInstanceId == targetFunctoid.Id)
                     .ToList();
 
+                // Automatically detect if a constant/qualifier is wired into this functoid
+                string derivedQualifier = activeQualifier;
+                if (string.IsNullOrEmpty(derivedQualifier)) {
+                    derivedQualifier = DetectQualifierConstant(targetFunctoid.Id, inputConnections);
+                }
+
                 var argumentExpressions = new List<string>();
                 int totalExpectedSlots = targetFunctoid.Definition?.InputParametersCount ?? 0;
 
@@ -420,23 +364,20 @@ namespace SkiaMapper.Services {
 
                     if (matchingWire != null && matchingWire.Source != null) {
                         if (matchingWire.Source.Type == ConnectionEndpointType.SourceNode) {
-                            // --- SANITIZED HERE ---
-                            string cleanPath = ToValidXPath(matchingWire.Source.NodePath);
+                            string cleanPath = ToValidXPath(matchingWire.Source.NodePath, derivedQualifier);
                             argumentExpressions.Add($"string(//{cleanPath})");
                         } else if (matchingWire.Source.Type == ConnectionEndpointType.Functoid) {
-                            string nestedCall = TraceSourceEndpoint(matchingWire.Source, out bool innerIsFunctoid);
+                            string nestedCall = TraceSourceEndpoint(matchingWire.Source, out bool innerIsFunctoid, derivedQualifier);
                             argumentExpressions.Add(innerIsFunctoid || nestedCall.StartsWith("user:")
                                 ? nestedCall
                                 : $"string({nestedCall})");
                         }
                     } else {
-                        // --- INTEGRATED FALLBACK PARAMETER EVALUATION ENGINE ---
                         if (_instanceFallbackParameterCache.TryGetValue(targetFunctoid.Id, out var customDefaults) &&
                             customDefaults.TryGetValue(slotIndex, out string? assignedDefaultLiteral)) {
-                            // Injected via Roslyn extraction logic during the Phase 1 trace loop
                             argumentExpressions.Add(assignedDefaultLiteral);
                         } else if (targetFunctoid.CustomMethodName == "StringLeft" && slotIndex == 1) {
-                            argumentExpressions.Add("5"); // Core factory framework baseline
+                            argumentExpressions.Add("5");
                         } else {
                             argumentExpressions.Add("\"\"");
                         }
@@ -452,66 +393,66 @@ namespace SkiaMapper.Services {
             }
 
             if (source.Type == ConnectionEndpointType.SourceNode && !string.IsNullOrEmpty(source.NodePath)) {
-                // --- SANITIZED HERE ---
-                string cleanPath = ToValidXPath(source.NodePath);
+                string cleanPath = ToValidXPath(source.NodePath, activeQualifier);
                 return $"//{cleanPath}";
             }
 
             return string.Empty;
         }
-        private string ToValidXPath(string rawPath) {
-            if (string.IsNullOrEmpty(rawPath)) return string.Empty;
 
-            // If the path uses the UI display format like "Loop [PO1]", convert it to valid XPath.
-            // e.g., "Loop [PO1]" -> "Loop[@LoopId='PO1']" or "Loop_PO1" depending on your XML structure.
-            if (rawPath.Contains("Loop [") && rawPath.EndsWith("]")) {
-                int startIdx = rawPath.IndexOf("[") + 1;
-                int len = rawPath.Length - 1 - startIdx;
-                string loopId = rawPath.Substring(startIdx, len).Trim();
-
-                // Find the base segment before "Loop ["
-                string basePart = rawPath.Substring(0, rawPath.IndexOf("Loop [")).TrimEnd('/');
-                return $"{basePart}/Loop[@LoopId='{loopId}']";
-            }
-
-            // General cleanup for any remaining spaces in node segments
-            var segments = rawPath.Split('/');
-            for (int i = 0; i < segments.Length; i++) {
-                if (segments[i].Contains(" [") && segments[i].EndsWith("]")) {
-                    // Convert custom display names safely
-                    segments[i] = segments[i].Replace(" [", "[@LoopId='").Replace("]", "']");
-                } else {
-                    segments[i] = segments[i].Replace(" ", "_");
+        /// <summary>
+        /// Scans incoming functoid wires to detect if a String Constant or literal value representing a qualifier (e.g. ST, BY, VN) is attached.
+        /// </summary>
+        private string? DetectQualifierConstant(Guid functoidId, List<MappingConnection> inputConnections) {
+            foreach (var conn in inputConnections) {
+                if (conn.Source?.Type == ConnectionEndpointType.Functoid && conn.Source.FunctoidInstanceId.HasValue) {
+                    var srcFunctoid = _activeFunctoids.FirstOrDefault(f => f.Id == conn.Source.FunctoidInstanceId.Value);
+                    if (srcFunctoid != null && (srcFunctoid.Definition?.Name == "String Constant" || srcFunctoid.CustomMethodName != null)) {
+                        string body = srcFunctoid.CustomScriptBody ?? "";
+                        if (body.Contains("return")) {
+                            int start = body.IndexOf('"');
+                            int end = body.LastIndexOf('"');
+                            if (start >= 0 && end > start) {
+                                return body.Substring(start + 1, end - start - 1);
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(srcFunctoid.CustomMethodName) && srcFunctoid.CustomMethodName.Length <= 4) {
+                            return srcFunctoid.CustomMethodName;
+                        }
+                    }
                 }
             }
-            return string.Join("/", segments);
+            return null;
         }
 
-        private string DetectCommonLoopPath(List<string> sourceExpressions) {
-            if (sourceExpressions == null || sourceExpressions.Count == 0) return null;
+        private string ToValidXPath(string rawPath, string? qualifier = null) {
+            if (string.IsNullOrEmpty(rawPath)) return string.Empty;
 
-            // Split all source paths into segments
-            var pathSegmentsList = sourceExpressions
-                .Select(e => e.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries))
-                .ToList();
-
-            // Find the longest common prefix that contains a Loop container
-            string commonLoop = null;
-            var firstPathSegments = pathSegmentsList[0];
-
-            for (int i = 0; i < firstPathSegments.Length; i++) {
-                string candidatePath = "//" + string.Join("/", firstPathSegments.Take(i + 1));
-
-                // Check if this candidate is a parent prefix for all source paths
-                bool isCommonToAll = pathSegmentsList.All(segments =>
-                    string.Join("/", segments).StartsWith(string.Join("/", firstPathSegments.Take(i + 1))));
-
-                if (isCommonToAll && candidatePath.Contains("Loop")) {
-                    commonLoop = candidatePath;
+            string xpath = rawPath;
+            if (xpath.Contains("Loop [") && xpath.EndsWith("]")) {
+                int startIdx = xpath.IndexOf("[") + 1;
+                int len = xpath.Length - 1 - startIdx;
+                string loopId = xpath.Substring(startIdx, len).Trim();
+                string basePart = xpath.Substring(0, xpath.IndexOf("Loop [")).TrimEnd('/');
+                xpath = $"{basePart}/Loop[@LoopId='{loopId}']";
+            } else {
+                var segments = xpath.Split('/');
+                for (int i = 0; i < segments.Length; i++) {
+                    if (segments[i].Contains(" [") && segments[i].EndsWith("]")) {
+                        segments[i] = segments[i].Replace(" [", "[@LoopId='").Replace("]", "']");
+                    } else {
+                        segments[i] = segments[i].Replace(" ", "_");
+                    }
                 }
+                xpath = string.Join("/", segments);
             }
 
-            return commonLoop;
+            // Automatically inject the N101 qualifier predicate if an active qualifier is detected
+            if (!string.IsNullOrEmpty(qualifier) && xpath.Contains("Loop[@LoopId='N1']") && !xpath.Contains("N101=")) {
+                xpath = xpath.Replace("Loop[@LoopId='N1']", $"Loop[@LoopId='N1'][N1/N101='{qualifier}']");
+            }
+
+            return xpath;
         }
     }
 }
