@@ -1,4 +1,6 @@
-﻿namespace SkiaMapper {
+﻿using SkiaMapper.Controls;
+
+namespace SkiaMapper {
     partial class MainForm {
         private System.ComponentModel.IContainer components = null;
 
@@ -187,6 +189,7 @@
             Controls.Add(tcMain);
             Name = "MainForm";
             Text = "SkiaMapper - C# Enterprise Pipeline Blueprint";
+            this.TextChanged += MainForm_TextChanged;
             tcMain.ResumeLayout(false);
             tbpMapper.ResumeLayout(false);
             tbpRepository.ResumeLayout(false);
@@ -194,6 +197,13 @@
             pnlRepo.ResumeLayout(false);
             pnlRepo.PerformLayout();
             ResumeLayout(false);
+        }
+
+        private void MainForm_TextChanged(object sender, EventArgs e) {
+
+        //ErrorHelper.HandleException($"MainForm Text Changed: {this.Text}", "MainForm", 3000);
+        
+       // Log.Info($"MainForm Text Changed: {this.Text}");
         }
 
         #endregion

@@ -29,6 +29,10 @@ namespace SkiaMapper.Services {
             _instanceFallbackParameterCache = new Dictionary<Guid, Dictionary<int, string>>();
         }
 
+
+
+       
+
         public void GenerateAndSaveMap() {
             if (_connections.Count == 0) {
                 MessageBox.Show("The workspace canvas contains no connections to compile.", "XSLT Engine Notice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -38,7 +42,8 @@ namespace SkiaMapper.Services {
                 _instanceFallbackParameterCache.Clear();
                 string xsltOutput = CompileXsltPayload();
                 string xsltName = "CanvasMapExport.xslt";
-                File.WriteAllText(xsltName, xsltOutput, Encoding.UTF8);
+                // FIX: Use UTF8Encoding with false to omit the BOM header bytes
+                File.WriteAllText(xsltName, xsltOutput,new UTF8Encoding(false));
                 MainForm.XsltPath = xsltName;
             } catch (Exception ex) {
                 MessageBox.Show($"XSLT generation failed:\n{ex.Message}", "Pipeline Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -148,6 +153,16 @@ namespace SkiaMapper.Services {
         private string CompileXsltPayload() {
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
+
+          
+            if (!string.IsNullOrWhiteSpace(MainForm.SourcePath)) {  // Embed Source and Destination paths into the XSLT header comments for re-hydration
+                sb.AppendLine($"<!-- SourcePath: {MainForm.SourcePath} -->");
+            }
+            if (!string.IsNullOrWhiteSpace(MainForm.DestinationPath)) {
+                sb.AppendLine($"<!-- DestinationPath: {MainForm.DestinationPath} -->");
+            }
+
+
             sb.AppendLine("<xsl:stylesheet version=\"1.0\" ");
             sb.AppendLine("                xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"");
             sb.AppendLine("                xmlns:user=\"urn:my-scripts\"");
@@ -183,9 +198,11 @@ namespace SkiaMapper.Services {
                 string path = connection.Target.NodePath;
                 if (string.IsNullOrEmpty(path)) continue;
 
-                string[] segments = path.Split('/');
+                // Inside CompileXsltPayload() in XsltMapGenerator.cs
+                string[] segments = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
                 var currentNode = rootNode;
-                foreach (var segment in segments) {
+                foreach (var rawSegment in segments) {
+                    string segment = rawSegment.Trim();
                     bool isAttr = segment.StartsWith("@");
                     if (!currentNode.Children.TryGetValue(segment, out var child)) {
                         child = new XsltTreeNode { Name = segment, IsAttribute = isAttr };

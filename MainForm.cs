@@ -84,11 +84,17 @@ namespace SkiaMapper {
                 }
                 SchemaNode? droot = LoadSchemaFromFile(defaultDest);
 
+                
+
                 if (droot != null) {
                     mapperControl.DestinationRoot = droot;
                 }
+             
+
 
                 mapperControl.Invalidate();
+                //mapperControl.LogMessage($"Source schema {mapperControl.DestinationRoot}");
+                //mapperControl.LogMessage($"Destination  schema {mapperControl.DestinationRoot}");
             }
         }
         private void LoadBuiltInFunctoids() {

@@ -16,6 +16,7 @@ using System.Xml;
 using System.Xml.Serialization;
 using System.Xml.Xsl;
 using static System.Net.WebRequestMethods;
+using System.Runtime.CompilerServices;
 namespace SkiaMapper.Controls;
 
 public class SkiaMapperControl : SKControl {
@@ -28,8 +29,8 @@ public class SkiaMapperControl : SKControl {
     }
     private readonly List<string> logMessages = new();
 
-    public void LogMessage(string message) {
-        logMessages.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
+    public void LogMessage(string message, [CallerMemberName] string cmn = null, [CallerLineNumber] int ln =0) {
+        logMessages.Add($"[{DateTime.Now:HH:mm:ss}]:{cmn}:{ln}  {message} ");
         if (logMessages.Count > 100) logMessages.RemoveAt(0); // Keep last 100 entries
         Invalidate();
     }
@@ -1517,31 +1518,8 @@ public class SkiaMapperControl : SKControl {
         return false;
     }
 
-
-    //public void HandleMouseWheel(SKPoint canvasPoint, int delta) {
-    //    // 1. Find the topmost functoid instance under the mouse cursor
-    //    // (Searching in reverse order ensures you hit the topmost drawn element if they overlap)
-    //    FunctoidInstance hoveredFunctoid = FunctoidInstances.LastOrDefault(f =>
-    //        canvasPoint.X >= f.X && canvasPoint.X <= f.X + f.Width &&
-    //        canvasPoint.Y >= f.Y && canvasPoint.Y <= f.Y + f.Height
-    //    );
-
-    //    if (hoveredFunctoid != null) {
-    //        // 2. Determine scaling factor based on wheel direction (scroll up vs. down)
-    //        float scaleFactor = delta > 0 ? 1.05f : 0.95f;
-
-    //        // 3. Apply scaling with safe minimum and maximum boundary constraints
-    //        float newWidth = Math.Clamp(hoveredFunctoid.Width * scaleFactor, 80f, 300f);
-    //        float newHeight = Math.Clamp(hoveredFunctoid.Height * scaleFactor, 40f, 150f);
-
-    //        hoveredFunctoid.Width = newWidth;
-    //        hoveredFunctoid.Height = newHeight;
-
-    //        // 4. Request canvas repaint to reflect the new dimensions
-    //        InvalidateSurface();
-    //    }
-    //}
     #region  Modularized MouseDown  Intercept Engine Block Helpers
+
     private void ProcessLeftClickToolPalette(MouseEventArgs e) {
         var headerRect = new SKRect(paletteBounds.Left, paletteBounds.Top, paletteBounds.Right, paletteBounds.Top + PaletteHeaderHeight);
 
@@ -1556,6 +1534,10 @@ public class SkiaMapperControl : SKControl {
 
                 if (ofd.ShowDialog() == DialogResult.OK) {
                     MainForm.XsltPath = ofd.FileName;
+
+                    // Automatically re-hydrate source & destination paths and schemas from the XSLT file
+                    RehydrateFromXslt(ofd.FileName);
+
                     Invalidate();
                 }
                 return;
@@ -1590,7 +1572,10 @@ public class SkiaMapperControl : SKControl {
 
                 case var loc when saveBtnRect.Contains(loc.X, loc.Y):
                     logMessages.Clear();
-                    using (var sfd = new SaveFileDialog { Filter = "Mapping Files (*.xslt)|*.xslt", DefaultExt = "xslt", AddExtension = true, Title = "Save Mapping Project & Schemas",FileName =  MainForm.XsltPath }) {
+                    string buildXsltPath(string src, string dest) => Path.Combine(Path.GetDirectoryName(dest) ?? string.Empty, $"{Path.GetFileNameWithoutExtension(src)}_{Path.GetFileNameWithoutExtension(dest)}.xslt");
+                    MainForm.XsltPath = buildXsltPath(MainForm.SourcePath, MainForm.DestinationPath);
+
+                    using (var sfd = new SaveFileDialog { Filter = "Mapping Files (*.xslt)|*.xslt", DefaultExt = "xslt", AddExtension = true, Title = "Save Mapping Project & Schemas", FileName = MainForm.XsltPath }) {
                         if (sfd.ShowDialog() == DialogResult.OK) {
                             var state = new MappingProjectState {
                                 SourceSchemaPath = MainForm.SourcePath,
@@ -1602,7 +1587,7 @@ public class SkiaMapperControl : SKControl {
                             var serializer = new XmlSerializer(typeof(MappingProjectState));
                             using var writer = new StreamWriter(sfd.FileName);
                             serializer.Serialize(writer, state);
-                           
+
                             LogMessage($"Saved Mapping XSLT: {sfd.FileName}");
                             LogMessage($"Source Schema: {MainForm.SourcePath}");
                             LogMessage($"Destination Schema: {MainForm.DestinationPath}");
@@ -1617,9 +1602,7 @@ public class SkiaMapperControl : SKControl {
                     using (var ofd = new OpenFileDialog { Filter = "XML & XSLT Files (*.xml;*.xslt;*.xsl)|*.xml;*.xslt;*.xsl|All Files (*.*)|*.*", DefaultExt = "xml", Title = "Load Mapping Schema" }) {
                         if (ofd.ShowDialog() == DialogResult.OK) {
                             LoadConfiguration(System.IO.File.ReadAllText(ofd.FileName));
-
                             this.FindForm()?.Text = $"Working on {ofd.FileName}";
-
                             isCanvasDirty = false;
                             Invalidate();
                         }
@@ -1648,7 +1631,7 @@ public class SkiaMapperControl : SKControl {
                 float scrollbarWidth = 5f;
                 float trackLeft = paletteBounds.Right - scrollbarWidth - 6f;
                 float trackTop = paletteBounds.Top + PaletteHeaderHeight + 6f;
-                SKRect scrollHitRect = new(trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
+                SKRect scrollHitRect = new SKRect(trackLeft - 4f, trackTop, paletteBounds.Right, trackTop + viewableHeight);
                 if (scrollHitRect.Contains(e.X, e.Y)) {
                     isDraggingToolboxScrollbar = true;
                     toolboxScrollbarDragStartY = e.Y;
@@ -1683,7 +1666,6 @@ public class SkiaMapperControl : SKControl {
             }
         }
     }
-
 
     private bool ProcessLeftClickCanvasFunctoids(MouseEventArgs e, float centerLeft) {
         for (int i = ActiveFunctoids.Count - 1; i >= 0; i--) {
@@ -2482,44 +2464,45 @@ public class SkiaMapperControl : SKControl {
     #region LoadConfiguration with Robust Rehydration and State Synchronization
 
     public void LoadConfiguration(string xmlContent) {
-        if (string.IsNullOrWhiteSpace(xmlContent)) return;
-
-        // Guard against accidentally loading an XSLT or wrong file type
-        if (xmlContent.Contains("stylesheet") || xmlContent.Contains("xsl:")) {
-            MessageBox.Show(
-                "The selected file is an XSLT stylesheet, not a mapping project state file (.xml). Please use the XSLT selector button to change stylesheets.",
-                "Invalid File Format",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning
-            );
-            return;
-        }
-
         try {
+            using var reader = new StringReader(xmlContent);
             var serializer = new XmlSerializer(typeof(MappingProjectState));
-            using var stringReader = new StringReader(xmlContent);
-            if (serializer.Deserialize(stringReader) is MappingProjectState loadedState) {
-                this.ActiveFunctoids.Clear();
-                this.Connections.Clear();
+            if (serializer.Deserialize(reader) is MappingProjectState state) {
 
-                if (loadedState.ActiveFunctoids != null) {
-                    foreach (var functoid in loadedState.ActiveFunctoids) {
-                        this.ActiveFunctoids.Add(functoid);
+                // 1. Restore Source Schema Path & File if it exists
+                if (!string.IsNullOrWhiteSpace(state.SourceSchemaPath) && System.IO.File.Exists(state.SourceSchemaPath)) {
+                    MainForm.SourcePath = state.SourceSchemaPath;
+                    // If your control has a method to load the source schema tree into view, invoke it here:
+                    // this.SourceRoot = MainForm.LoadSchemaFromFile(state.SourceSchemaPath);
+                }
+
+                // 2. Restore Destination Schema Path & File if it exists
+                if (!string.IsNullOrWhiteSpace(state.DestinationSchemaPath) && System.IO.File.Exists(state.DestinationSchemaPath)) {
+                    MainForm.DestinationPath = state.DestinationSchemaPath;
+                    // If your control has a method to load the destination schema tree into view, invoke it here:
+                    // this.DestinationRoot = MainForm.LoadSchemaFromFile(state.DestinationSchemaPath);
+                }
+
+                // 3. Clear and reload canvas state
+                ActiveFunctoids.Clear();
+                if (state.ActiveFunctoids != null) {
+                    foreach (var f in state.ActiveFunctoids) {
+                        ActiveFunctoids.Add(f);
                     }
                 }
 
-                if (loadedState.Connections != null) {
-                    foreach (var connection in loadedState.Connections) {
-                        this.Connections.Add(connection);
+                Connections.Clear();
+                if (state.Connections != null) {
+                    foreach (var c in state.Connections) {
+                        Connections.Add(c);
                     }
                 }
 
-                this.isCanvasDirty = false;
-                this.Invalidate();
+                isCanvasDirty = false;
+                Invalidate();
             }
         } catch (Exception ex) {
-            System.Diagnostics.Debug.WriteLine($"[REHYDRATE ERROR] Failed to load layout map XML: {ex.Message}");
-            throw;
+            MessageBox.Show($"Failed to load mapping project:\n{ex.Message}", "Deserialization Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -2555,5 +2538,34 @@ public class SkiaMapperControl : SKControl {
         }
 
         return false;
+    }
+    private void RehydrateFromXslt(string xsltPath) {
+        try {
+            if (!System.IO.File.Exists(xsltPath)) return;
+            string content = System.IO.File.ReadAllText(xsltPath);
+
+            // 1. Extract and restore SourcePath from embedded comment
+            var sourceMatch = System.Text.RegularExpressions.Regex.Match(content, @"<!--\s*SourcePath:\s*(.*?)\s*-->");
+            if (sourceMatch.Success) {
+                string srcPath = sourceMatch.Groups[1].Value.Trim();
+                if (System.IO.File.Exists(srcPath)) {
+                    MainForm.SourcePath = srcPath;
+                }
+            }
+
+            // 2. Extract and restore DestinationPath from embedded comment
+            var destMatch = System.Text.RegularExpressions.Regex.Match(content, @"<!--\s*DestinationPath:\s*(.*?)\s*-->");
+            if (destMatch.Success) {
+                string destPath = destMatch.Groups[1].Value.Trim();
+                if (System.IO.File.Exists(destPath)) {
+                    MainForm.DestinationPath = destPath;
+                }
+            }
+
+            // 3. Trigger UI refresh
+            this.Invalidate();
+        } catch (Exception ex) {
+            System.Diagnostics.Debug.WriteLine($"[REHYDRATE ERROR] {ex.Message}");
+        }
     }
 }
