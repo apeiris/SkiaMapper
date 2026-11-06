@@ -78,12 +78,12 @@ When a functoid's script body differs from its default baseline template (IsScri
 
 ## Core Engine Components
 
-1.**XsltMapGenerator**
+1. ***XsltMapGenerator***
 <br>
 The master compilation block that converts graph nodes and wire configurations into standard-compliant XSLT files. It coordinates the data lifecycle through two explicit execution layers:
 
-* **Roslyn AST Signature Stripping:** Scans customized FunctoidInstance scripts using C# syntax nodes. It isolates parameter defaults, standardizes signature formats, and maps runtime variables to prevent naming collisions.
-* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins.
+* **Roslyn AST Signature Stripping:** Scans customized FunctoidInstance scripts using C# syntax nodes. It automatically isolates parameter value defaults (e.g., = 5) to inject into an internal fallback cache, sanitizes parameter data constraints (casting data boundaries from int to double safely for XSLT environments), and re-maps inputs with runtime inline variables to completely avoid data collision boundaries.
+* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins. If a wire mapping gap is intercepted, it queries the fallback parameters lookup block or falls back onto application presets to guarantee stable compilation.
 
 **2.ScriptCompilationEngine**<br>
 An analytical isolation wrapper designed to instantly validate code blocks or evaluate script expressions on-the-fly without requiring full file compilation cycles. 
