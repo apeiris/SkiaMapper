@@ -268,6 +268,7 @@ namespace SkiaMapper.Services {
             return string.Empty;
         }
 
+
         private void RenderNodeRecursive(XsltTreeNode node, StringBuilder sb, int indentLevel, string activeLoopPath = null) {
             string indent = new string(' ', indentLevel * 2);
 
@@ -281,8 +282,8 @@ namespace SkiaMapper.Services {
                     string expr = node.ValueExpression;
                     if (!string.IsNullOrEmpty(activeLoopPath)) {
                         string prefix = activeLoopPath.TrimEnd('/') + "/";
-                        if (expr.StartsWith(prefix)) {
-                            expr = expr.Substring(prefix.Length);
+                        if (expr.Contains(prefix)) {
+                            expr = expr.Replace(prefix, "");
                         }
                     }
                     sb.AppendLine($"{indent}  <xsl:value-of select=\"{expr}\" />");
@@ -305,8 +306,8 @@ namespace SkiaMapper.Services {
                     string expr = node.ValueExpression;
                     if (!string.IsNullOrEmpty(currentLoopPath)) {
                         string prefix = currentLoopPath.TrimEnd('/') + "/";
-                        if (expr.StartsWith(prefix)) {
-                            expr = expr.Substring(prefix.Length);
+                        if (expr.Contains(prefix)) {
+                            expr = expr.Replace(prefix, "");
                         }
                     }
 
@@ -339,7 +340,6 @@ namespace SkiaMapper.Services {
                 sb.AppendLine($"{indent}</xsl:for-each>");
             }
         }
-
         private class XsltTreeNode {
             public string Name { get; set; } = "";
             public bool IsAttribute { get; set; } = false;
