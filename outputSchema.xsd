@@ -1,18 +1,19 @@
 <?xml version="1.0"?>
 <xs:schema elementFormDefault="qualified" id="GeneratedFromSchemaNode" xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  <xs:element name="po">
+  <xs:element name="transaction">
     <xs:complexType>
       <xs:sequence>
-        <xs:element name="transaction">
+        <xs:element name="Po">
           <xs:complexType>
-            <xs:attribute name="typeId" type="xs:string" />
-            <xs:attribute name="x12" type="xs:string" />
-            <xs:attribute name="senderId" type="xs:string" />
-            <xs:attribute name="receiverId" type="xs:string" />
-            <xs:attribute name="PoNumber" type="xs:string" />
-            <xs:attribute name="PODate" type="xs:string" />
+            <xs:sequence>
+              <xs:element name="PurposeCode" type="xs:string" />
+              <xs:element name="TypeCode" type="xs:string" />
+              <xs:element name="Number" type="xs:string" />
+              <xs:element name="Date" type="xs:string" />
+            </xs:sequence>
           </xs:complexType>
         </xs:element>
+        <xs:element name="Sender" type="xs:string" />
         <xs:element name="Contact">
           <xs:complexType>
             <xs:sequence>
@@ -60,6 +61,10 @@
           </xs:complexType>
         </xs:element>
       </xs:sequence>
+      <xs:attribute name="ControlNumber" type="xs:string" />
+      <xs:attribute name="DocId" type="xs:string" />
+      <xs:attribute name="SetId" type="xs:string" />
+      <xs:attribute name="version" type="xs:string" />
     </xs:complexType>
   </xs:element>
 </xs:schema>

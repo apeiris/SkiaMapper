@@ -6,8 +6,8 @@ namespace SkiaMapper.Forms {
     public class OutputViewerForm : Form {
         private WebBrowser webBrowser;
 
-        public OutputViewerForm(string filePath) {
-            Text = "Transformation Output Viewer";
+        public OutputViewerForm(string filePath,string title) {
+            Text = "Schema Viewer";
             Width = 800;
             Height = 600;
             StartPosition = FormStartPosition.CenterParent;

@@ -297,7 +297,7 @@ The generation engine processes transformation paths by dynamically tracking dat
 
 ---
 ## UI Topology & Layout
-![Data Mapper Workspace](mapper.png)
+![Data Mapper Workspace](mapper2.png)
 The **Data Mapper Workspace** is an interactive, visual data-mapping editor designed to bridge data schemas using nodes, connections, and functional blocks. The workspace structural mechanics and layout model are detailed below.
 
 

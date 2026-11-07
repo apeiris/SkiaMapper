@@ -1,7 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<po>
+
 	<!--PONumber=BEG03 PODate=BEG05  AckType=BEG07(AC,AD,AE,AK,AP,AT,NA,RD,RF,RJ,RN,RO,RV,ZZ)-->
-	<transaction typeId="xx" x12="xxx" senderId="" receiverId="" PoNumber="" PODate=""/>
+ <transaction ControlNumber="" DocId="ST01" SetId="ST02" version="GS08" >
+	<Po>
+		<PurposeCode>BEG01</PurposeCode>
+		<TypeCode>BEG02</TypeCode>
+		<Number>BEG03</Number>
+		<Date>BEG05</Date>
+	</Po>
+	 <Sender></Sender> 
 	<Contact>
 		<FuncCode></FuncCode>
 		<!-- PER01-->
@@ -33,4 +40,4 @@
 		<line id="1" qty="10" uom="ea" price="22.00" pidq="VN" pid="123915" description="ESP32-S3 8MB "  ></line>
 		<line id="2" qty="8" uom="ea" price="22.00" pidq="VN"  pid="233125" description="Proximity Sensor"  ></line>
 	</lines>
-</po>
+</transaction>

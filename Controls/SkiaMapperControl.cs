@@ -10,13 +10,14 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Drawing;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Windows.Forms;
 using System.Xml;
 using System.Xml.Serialization;
 using System.Xml.Xsl;
 using static System.Net.WebRequestMethods;
-using System.Runtime.CompilerServices;
 namespace SkiaMapper.Controls;
 
 public class SkiaMapperControl : SKControl {
@@ -76,6 +77,9 @@ public class SkiaMapperControl : SKControl {
     private SKRect executeXsltBtnRect;
     private SKRect xsltFileEllipsisRect;
     private SKRect showOutputCheckboxRect;
+    private SKRect sourceFileEditRect;
+    private SKRect destinationFileEditRect;
+
     private bool showOutputChecked = true;
 
 
@@ -124,9 +128,14 @@ public class SkiaMapperControl : SKControl {
     private SKRect sourceFileViewRect;
     private SKRect destinationFileViewRect;
 
+    private SKTypeface iconTypeface;
+    private SKFont iconFont;
+
     #endregion Properties and Fields
 
     public SkiaMapperControl() {
+
+
         this.DoubleBuffered = true;
         this.Dock = DockStyle.Fill;
         this.SetStyle(ControlStyles.Selectable, true);
@@ -154,6 +163,20 @@ public class SkiaMapperControl : SKControl {
         // Automatically sets IsCanvasDirty = true on any layout additions, deletions, or clears
         ActiveFunctoids.CollectionChanged += OnCanvasStructureChanged;
         Connections.CollectionChanged += OnCanvasStructureChanged;
+
+
+        // Load the embedded font stream
+        var assembly = Assembly.GetExecutingAssembly();
+
+        // Note: The resource name is usually DefaultNamespace.FolderName.FileName.ttf
+        // Check your assembly's manifest resource names if this returns null.
+        string resourceName = "SkiaMapper.MaterialIcons-Regular.ttf";
+        string[] resourceNames = assembly.GetManifestResourceNames();
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream != null) {
+            iconTypeface = SKTypeface.FromStream(stream);
+            iconFont = new SKFont(iconTypeface, 14f); // Set your desired icon size
+        }
 
     }
     /// <summary>
@@ -188,7 +211,7 @@ public class SkiaMapperControl : SKControl {
             if (showOutputChecked) {
                 try {
                     // Open the custom Windows Form viewer containing the WebBrowser control
-                    using (var viewerForm = new SkiaMapper.Forms.OutputViewerForm("POoutput.xml")) {
+                    using (var viewerForm = new SkiaMapper.Forms.OutputViewerForm("POoutput.xml","Transformed output")) {
                         viewerForm.ShowDialog(this);
                     }
                 } catch (Exception ex) {
@@ -611,9 +634,10 @@ public class SkiaMapperControl : SKControl {
     }
     #endregion RenderTreeElement 551,536,580,575
 
+
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
         if (DesignMode || LicenseManager.UsageMode == LicenseUsageMode.Designtime) {
-            // Render simple placeholder text or skip Skia render initialization
+            // Render simple placeholder text or skip SKia render initialization
             return;
         }
 
@@ -663,6 +687,14 @@ public class SkiaMapperControl : SKControl {
             sourceFileEllipsisRect.Bottom
         );
 
+        // Source Edit Button bounds (placed to the left of the view button)
+        sourceFileEditRect = new SKRect(
+            sourceFileViewRect.Left - btnWidth - 4f,
+            sourceFileViewRect.Top,
+            sourceFileViewRect.Left - 4f,
+            sourceFileViewRect.Bottom
+        );
+
         using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
         using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
         using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true })
@@ -686,13 +718,23 @@ public class SkiaMapperControl : SKControl {
                 canvas.DrawPath(eyePath, iconStroke);
             }
             canvas.DrawCircle(cx1, cy1, 2f, iconFill);
+
+            // Render Source Edit Button
+            canvas.DrawRoundRect(sourceFileEditRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(sourceFileEditRect, 3f, 3f, btnBorder);
+            using var iconFont = new SKFont(iconTypeface, 12f);
+            // 3. Pass iconFont (instead of _headerButtonFont) into DrawText:
+            canvas.DrawText("\uE3C9", sourceFileEditRect.MidX, sourceFileEditRect.MidY + 4f, SKTextAlign.Center, iconFont, btnTextPaint);
+
         }
+
+        // Clip Source Header Label text to prevent overlapping the new edit button
+        SKRect labelClipRect = new SKRect(0, 0, sourceFileEditRect.Left - 4f, headerHeight);
 
         string sourceLabelText = !string.IsNullOrWhiteSpace(MainForm.SourcePath)
             ? $"Source: {System.IO.Path.GetFileName(MainForm.SourcePath)}"
             : "Source Document";
 
-        SKRect labelClipRect = new SKRect(0, 0, sourceFileViewRect.Left - 4f, headerHeight);
         canvas.Save();
         canvas.ClipRect(labelClipRect);
         using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
@@ -764,6 +806,14 @@ public class SkiaMapperControl : SKControl {
             destinationFileEllipsisRect.Bottom
         );
 
+        // Destination Edit Button (placed to the left of the destination view button)
+        destinationFileEditRect = new SKRect(
+            destinationFileViewRect.Left - btnWidth - 4f,
+            destinationFileViewRect.Top,
+            destinationFileViewRect.Left - 4f,
+            destinationFileViewRect.Bottom
+        );
+
         using (var btnBg = new SKPaint { Color = new SKColor(210, 220, 235), Style = SKPaintStyle.Fill, IsAntialias = true })
         using (var btnBorder = new SKPaint { Color = new SKColor(160, 175, 195), Style = SKPaintStyle.Stroke, StrokeWidth = 1f, IsAntialias = true })
         using (var btnTextPaint = new SKPaint { Color = new SKColor(40, 50, 70), IsAntialias = true })
@@ -787,13 +837,22 @@ public class SkiaMapperControl : SKControl {
                 canvas.DrawPath(eyePath, iconStroke);
             }
             canvas.DrawCircle(cx2, cy2, 2f, iconFill);
+
+            // Destination Edit Button & Pencil Icon
+            canvas.DrawRoundRect(destinationFileEditRect, 3f, 3f, btnBg);
+            canvas.DrawRoundRect(destinationFileEditRect, 3f, 3f, btnBorder);
+
+
+            using var iconFont = new SKFont(iconTypeface, 12f);
+            // 3. Pass iconFont (instead of _headerButtonFont) into DrawText:
+            canvas.DrawText("\uE3C9", destinationFileEditRect.MidX, destinationFileEditRect.MidY + 4f, SKTextAlign.Center, iconFont, btnTextPaint);
         }
 
         string destLabelText = !string.IsNullOrWhiteSpace(MainForm.DestinationPath)
             ? $"Destination: {System.IO.Path.GetFileName(MainForm.DestinationPath)}"
             : "Destination Document";
 
-        SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileViewRect.Left - 4f, headerHeight);
+        SKRect destLabelClipRect = new SKRect(centerRight, 0, destinationFileEditRect.Left - 4f, headerHeight);
         canvas.Save();
         canvas.ClipRect(destLabelClipRect);
         using (var headerTextPaint = new SKPaint { Color = new SKColor(50, 65, 85), IsAntialias = true }) {
@@ -1865,7 +1924,7 @@ public class SkiaMapperControl : SKControl {
                 if (sourceFileViewRect.Contains(e.X, e.Y)) {
                     if (!string.IsNullOrEmpty(MainForm.SourcePath) && System.IO.File.Exists(MainForm.SourcePath)) {
                         try {
-                            var viewerForm = new SkiaMapper.Forms.OutputViewerForm(MainForm.SourcePath);
+                            var viewerForm = new SkiaMapper.Forms.OutputViewerForm(MainForm.SourcePath,"Input schema");
                             viewerForm.Show(this); // Non-modal window linked to parent
                             LogMessage($"Opened source file viewer: {MainForm.SourcePath}");
                         } catch (Exception ex) {
@@ -1930,11 +1989,54 @@ public class SkiaMapperControl : SKControl {
                     return;
                 }
 
+                if (sourceFileEditRect.Contains(e.X, e.Y)) {
+                    if (!string.IsNullOrEmpty(MainForm.SourcePath) && System.IO.File.Exists(MainForm.SourcePath)) {
+                        try {
+                            string xmlContent = System.IO.File.ReadAllText(MainForm.SourcePath);
+                            using var editor = new ScriptEditorDialog(xmlContent, "Source XML Schema");
+                            if (editor.ShowDialog() == DialogResult.OK) {
+                                System.IO.File.WriteAllText(MainForm.SourcePath, editor.ScriptContent);
+                                this.SourceRoot = MainForm.LoadSchemaFromFile(MainForm.SourcePath);
+                                LogMessage($"Source Schema updated and reloaded: {MainForm.SourcePath}");
+                                Invalidate();
+                            }
+                        } catch (Exception ex) {
+                            MessageBox.Show($"Error opening schema editor:\n{ex.Message}", "Editor Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            LogMessage($"Failed to edit source XML schema: {ex.Message}");
+                        }
+                    } else {
+                        MessageBox.Show("Source file path is not set or file does not exist.", "File Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    return;
+                }
+
+                if (destinationFileEditRect.Contains(e.X, e.Y)) {
+                    if (!string.IsNullOrEmpty(MainForm.DestinationPath) && System.IO.File.Exists(MainForm.DestinationPath)) {
+                        try {
+                            string xmlContent = System.IO.File.ReadAllText(MainForm.DestinationPath);
+                            using var editor = new ScriptEditorDialog(xmlContent, "Destination XML Schema");
+                            if (editor.ShowDialog() == DialogResult.OK) {
+                                System.IO.File.WriteAllText(MainForm.DestinationPath, editor.ScriptContent);
+                                this.DestinationRoot = MainForm.LoadSchemaFromFile(MainForm.DestinationPath);
+                                LogMessage($"Destination Schema updated and reloaded: {MainForm.DestinationPath}");
+                                Invalidate();
+                            }
+                        } catch (Exception ex) {
+                            MessageBox.Show($"Error opening schema editor:\n{ex.Message}", "Editor Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            LogMessage($"Failed to edit destination XML schema: {ex.Message}");
+                        }
+                    } else {
+                        MessageBox.Show("Destination file path is not set or file does not exist. Please select a destination schema file first.", "File Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    return;
+                }
+
+
                 // --- 4. DESTINATION HEADER BUTTONS INTERCEPT (View & Ellipsis) ---
                 if (destinationFileViewRect.Contains(e.X, e.Y)) {
                     if (!string.IsNullOrEmpty(MainForm.DestinationPath) && System.IO.File.Exists(MainForm.DestinationPath)) {
                         try {
-                            var viewerForm = new SkiaMapper.Forms.OutputViewerForm(MainForm.DestinationPath);
+                            var viewerForm = new SkiaMapper.Forms.OutputViewerForm(MainForm.DestinationPath,"Target schema");
                             viewerForm.Show(this); // Non-modal window linked to parent
                             LogMessage($"Opened destination file viewer: {MainForm.DestinationPath}");
                         } catch (Exception ex) {

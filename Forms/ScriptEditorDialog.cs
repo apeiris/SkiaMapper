@@ -2,6 +2,7 @@
 using SkiaMapper.Controls;
 using SkiaMapper.Models;
 using System;
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -11,15 +12,41 @@ public class ScriptEditorDialog : Form {
     private TextEditorControl textEditor;
     private Button btnSave;
     private Button btnCancel;
-    private FunctoidInstance targetInstance;
-    private SkiaMapperControl parentControl;
+    private FunctoidInstance? targetInstance;
+    private SkiaMapperControl? parentControl;
 
+    /// <summary>
+    /// Gets or sets the script or text content of the editor.
+    /// </summary>
+    /// 
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public string ScriptContent {
+        get => textEditor?.Text ?? string.Empty;
+        set {
+            if (textEditor != null) {
+                textEditor.Text = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Constructor for plain text / XML schema editing.
+    /// </summary>
+    public ScriptEditorDialog(string initialContent, string title) {
+        InitializeEditor(title, initialContent);
+    }
+
+    /// <summary>
+    /// Constructor for FunctoidInstance script editing.
+    /// </summary>
     public ScriptEditorDialog(FunctoidInstance instance, SkiaMapperControl control) {
         targetInstance = instance;
-        targetInstance = instance;
         parentControl = control;
+        InitializeEditor($"Configure Script Block: {instance.CustomMethodName}", instance.CustomScriptBody ?? string.Empty);
+    }
 
-        Text = $"Configure Script Block: {instance.CustomMethodName}";
+    private void InitializeEditor(string title, string content) {
+        Text = title;
         Width = 700;
         Height = 500;
         StartPosition = FormStartPosition.CenterParent;
@@ -27,18 +54,19 @@ public class ScriptEditorDialog : Form {
         // 1. Initialize ICSharpCode TextEditorControl
         textEditor = new TextEditorControl {
             Dock = DockStyle.Fill,
-            Text = instance.CustomScriptBody ?? string.Empty
+            Text = content
         };
 
         // Enable line numbers and show matching brackets
         textEditor.ShowLineNumbers = true;
         textEditor.IsReadOnly = false;
 
-        // 2. Set Syntax Highlighting to C#
+        // 2. Set Syntax Highlighting to C# (or XML based on content/title if desired)
+        string highlightStrategy = title.Contains("XML", StringComparison.OrdinalIgnoreCase) ? "XML" : "C#";
         textEditor.Document.HighlightingStrategy =
-            ICSharpCode.TextEditor.Document.HighlightingStrategyFactory.CreateHighlightingStrategy("C#");
+            ICSharpCode.TextEditor.Document.HighlightingStrategyFactory.CreateHighlightingStrategy(highlightStrategy);
 
-        // 3. Add Custom Context Menu Items (similar to your canvas setup)
+        // 3. Add Custom Context Menu Items
         var editorContextMenu = textEditor.ContextMenuStrip ?? new ContextMenuStrip();
 
         var formatScriptItem = new ToolStripMenuItem("Format Script Block");
@@ -80,17 +108,16 @@ public class ScriptEditorDialog : Form {
     }
 
     private void FormatScriptItem_Click(object? sender, EventArgs e) {
-        // Optional quick formatting action logic
         MessageBox.Show(this, "Script formatting helper invoked.", "Format Script", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void BtnSave_Click(object? sender, EventArgs e) {
-        // Save the updated script text back to the functoid instance
-        targetInstance.CustomScriptBody = textEditor.Text;
-        //targetInstance.IsScriptCustomized = true;
+        if (targetInstance != null && parentControl != null) {
+            // Save back to functoid instance if called from canvas
+            targetInstance.CustomScriptBody = textEditor.Text;
+            parentControl.OnFunctoidScriptModified(targetInstance);
+        }
 
-        // Notify the parent canvas control to re-analyze and redraw
-        parentControl.OnFunctoidScriptModified(targetInstance);
         DialogResult = DialogResult.OK;
         Close();
     }

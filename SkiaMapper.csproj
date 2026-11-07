@@ -45,6 +45,21 @@
 		<None Remove="SkiaMapper.Tests\**\*" />
 	</ItemGroup>
 
+	<ItemGroup><!--<EmbeddedResource Include="SkiaMapper.MaterialIcons-Regular.ttf">-->
+	    
+		  
+    <!--<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </EmbeddedResource>-->
+	
+	  <None Remove="MaterialIcons-Regular.ttf" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <EmbeddedResource Include="MaterialIcons-Regular.ttf">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </EmbeddedResource>
+	</ItemGroup>
+
 	<ItemGroup>
 	  <Compile Update="Properties\Settings.Designer.cs">
 	    <DesignTimeSharedInput>True</DesignTimeSharedInput>
