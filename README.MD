@@ -1,349 +1,181 @@
-# SkiaMapper XSLT Generation Engine - T2
+# SkiaMapper
 
-A robust, decoupled backend compilation engine that transforms a visual, graph-based canvas data topology into high-performance, valid XSLT 1.0 style sheets. 
+**SkiaMapper** is a high-performance visual schema mapping and transformation layout system built for .NET Windows Forms using **SkiaSharp** vector graphics and **Roslyn** C# compilation scripts. It enables visual mapping between hierarchical source documents (XML, XSD, EDI/X12) and target destination schemas via dynamic functoids and compile-on-the-fly XSLT execution.
 
-This engine is specifically engineered to handle complex data mapping pipelines using **Roslyn AST syntax manipulation** to dynamically bridge structural type mismatches between native XSLT platforms and custom C# extension script fragments.
+![SkiaMapper Canvas Workspace](mapper2.png)
+
+## Key Features
+
+* **High-Performance Canvas Rendering**: Fully hardware-accelerated dual-tree and node-wire grid interface using `SkiaSharp`.
+* **Dynamic C# Functoids**: Add, configure, duplicate, and execute custom C# script blocks directly inside visual functoid nodes.
+* **Automated XSLT & Dynamic C# Extension Generation**: Translates topological grid layouts into clean XSLT stylesheets and compiles inline C# extension objects dynamically using Roslyn.
+* **Multi-Format Schema Ingestion**: Native parsing for XSD, XML instances, and EDI/X12 formats (via `OopFactory.X12`).
+* **Interactive Wire Routing**: Bezier curve wire connections with dynamic multi-port expansion, hit-testing, and real-time execution feedback.
+* **Embedded Viewer & Code Editor**: Edit custom Roslyn scripts or schema topologies on the fly with real-time XSLT preview output.
 
 ---
 
-## Core Mapping Paradigm
+## Workspace Operations Overview
 
-The transformation process relies on loading an **Input XML Schema** (defining the incoming data profile) and a **Desired Output XML Schema** (defining the expected target data format) to initialize the visual design workspace. This architectural concept is directly equivalent to **BizTalk Server Mapping**, where users visually bridge source schemas to destination schemas using a canvas, links, and functional transformation blocks (functoids). 
+The visual mapper workspace is divided into three core operational zones: the **Source Tree (Left)**, the **Workspace Canvas & Functoid Toolbox (Center)**, and the **Destination Tree (Right)**.
 
-Once the data paths are visually modeled, the engine compiles the graphical layout into a standalone XSLT stylesheet that executes the structural translation at runtime.
+```
++------------------------+------------------------------------+------------------------+
+|   SOURCE SCHEMA TREE   |     WORKSPACE CANVAS & TOOLBOX     | DESTINATION SCHEMA TREE|
+|                        |                                    |                        |
+|  - Load EDI/XML/XSD    |  - Dynamic Bezier Wires            |  - Target Output Nodes |
+|  - Hierarchical View   |  - Custom C# Script Blocks         |  - Map Target Anchor   |
+|  - Expand / Collapse   |  - Floating Palette & Toolbar      |  - Attribute Mapping   |
+|  - Virtual Scrolling   |  - Output Execution Engine         |  - Virtual Scrolling   |
++------------------------+------------------------------------+------------------------+
+```
+
+### 1. Source Document Panel (Left)
+* **Ingestion & Parsing**: Automatically ingests XSD, XML, or flat EDI/X12 files (which are dynamically converted into XML schema structures via `OopFactory.X12`).
+* **Tree View Navigation**: Renders collapsible, hierarchical XML elements, attributes (prefixed with `@`), and EDI loops (e.g., `Loop [N1]`, `Loop [PO1]`).
+* **Header Actions**:
+  * `...` **Ellipsis Button**: Browse and load a new source document.
+  * 👁️ **View Button**: Opens the raw source document in the embedded `OutputViewerForm`.
+  * ✏️ **Edit Button**: Opens an in-app XML editor to modify the source schema structure directly.
+
+### 2. Workspace Canvas & Functoid Toolbox (Center & Floating)
+* **Interactive Wiring**: Drag connections directly from source nodes into functoid input ports, or link functoid outputs directly to destination nodes using smooth Bezier curve vector links.
+* **Functoid Instances**:
+  * **Dynamic Scaling**: Scale functoid blocks using the mouse wheel over canvas nodes.
+  * **Port Auto-Expansion**: Variadic methods (`params` arrays) dynamically expand input ports as additional connection wires are attached.
+  * **Customization Tracker**: Shows a red modification dot on functoids whose C# script signature or body has been edited.
+* **Floating Tool Palette**:
+  * Contains categorized functoids (Conversion, Scientific, Database, Advanced, Scripting).
+  * **Canvas Actions**: Save mapping configuration (`.xslt`), Load existing map, Clear Canvas, or Execute XSLT transformation.
+  * **Show Output Checkbox**: Toggles whether the transformation result opens immediately upon compilation.
+
+### 3. Destination Document Panel (Right)
+* **Schema Target Anchors**: Renders the target XML node tree structure to receive mapping expressions.
+* **Loop & Attribute Binding**: Supports standard element binding, attribute assignment, and context-aware loop structure target bindings.
+* **Header Actions**: View target schema structure or load alternative destination definitions.
 
 ---
 
-## Technical Architecture & Pipeline Flow
+## Output Transformation Preview
 
-The compilation process is split into two phases: an initial **Script Sanitization Phase** that uses a Roslyn parser to scrape and prepare script signatures, followed by a **Backward-Tracing Recursive Tree Construction Phase** anchored on downstream destination elements.
+Executing a transformation automatically compiles the visual topological mapping into an XSLT payload paired with Roslyn C# extension objects, producing cleanly structured output:
+
+![Mapped Output Preview](MappedOutput.PNG)
+
+---
+
+## Architecture Overview
+
+### Component Hierarchy
+
+The application follows a modular architecture decoupling the UI rendering layer, compilation pipeline, and dynamic execution engine:
 
 ```mermaid
-flowchart TD
-    %% Define Nodes
-    A[Start: GenerateAndSaveMap] --> B[Clear Cache & State Tracking]
-    B --> C[Phase 1: Process & Sanitize Script Blocks]
+graph TD
+    SubGraphMain[MainForm Entry Window] --> SkiaControl[SkiaMapperControl]
     
-    %% Phase 1 Subtree
-    C --> D{Is Functoid Script Customized?}
-    D -- No / Default --> E[Extract Basic Method Signature Key]
-    D -- Yes --> F[Parse via CSharpSyntaxTree & AST]
-    F --> G[Extract Parameter Default Literals to Cache]
-    G --> H[Strip Parameter Defaults & Convert Int to Double]
-    H --> I[Inject __xslt_ Native Cast Blocks]
-    E & I --> J[Append Non-Duplicate Methods to msxsl:script Block]
+    subgraph UI & Rendering Layer
+        SkiaControl -->|Renders| SourceTree[Source Schema Tree]
+        SkiaControl -->|Renders| FunctoidCanvas[Functoid Workspace Canvas]
+        SkiaControl -->|Renders| DestTree[Destination Schema Tree]
+        SkiaControl -->|Manages| Palette[Functoid Tool Palette]
+    end
     
-    %% Phase 2 Subtree
-    J --> K[Phase 2: Build Template Transformation Tree]
-    K --> L[Locate Terminal Connections: ConnectionEndpointType.DestinationNode]
-    L --> M[Iterate Terminal Targets & Recursively Walk Graph Backward]
-    
-    M --> N{Evaluate Source Type}
-    N -- SourceNode --> O[Return XPath Node Expression: //NodePath]
-    N -- Functoid --> P[Resolve Input Argument Slots]
-    
-    %% Slot Logic
-    P --> Q{Is Connection Present for Slot?}
-    Q -- Yes --> R[Recursively Trace Nested Inputs]
-    Q -- No --> S{Fallback Available in Cache?}
-    S -- Yes --> T[Inject Scraped Parameter Default]
-    S -- No --> U[Inject Engine Default Blueprint/Empty String]
-    
-    R & T & U --> V[Construct user:MethodName Function String]
-    O & V --> W[Write Output to Valid xsl:value-of Syntaxes]
-    W --> X[Save Output Payload to File System via SaveFileDialog]
-    
-    %% Styling
-    style A fill:#4CAF50,stroke:#388E3C,stroke-width:2px,color:#fff
-    style C fill:#2196F3,stroke:#1976D2,stroke-width:2px,color:#fff
-    style K fill:#9C27B0,stroke:#7B1FA2,stroke-width:2px,color:#fff
-    style X fill:#FF9800,stroke:#F57C00,stroke-width:2px,color:#fff
+    subgraph Data Models
+        SchemaNode[SchemaNode Tree]
+        FunctoidInst[FunctoidInstance]
+        ConnEndpoint[MappingConnection & ConnectionEndpoint]
+    end
+
+    SkiaControl --> SchemaNode
+    SkiaControl --> FunctoidInst
+    SkiaControl --> ConnEndpoint
+
+    subgraph Transformation & Compilation Engine
+        XsltGen[XsltMapGenerator]
+        Analyzer[FunctoidAnalyzer]
+        RoslynExec[RoslynMapExecutor]
+    end
+
+    SkiaControl -->|Generates XSLT| XsltGen
+    SkiaControl -->|Analyzes Signature| Analyzer
+    XsltGen -->|Roslyn Dynamic Compilation| RoslynExec
 ```
 
+## Mapping Pipeline & Execution Flow
 
-## Modifying Functoid Scripts & Custom Code
-Users can override and customize the default template behavior of any functoid directly on the workspace canvas using the integrated scripting engine.
+When a user executes a transformation map, the system processes node relationships, analyzes functoid parameter constraints, and generates standard XSLT paired with compiled Roslyn dynamic extensions:
 
-### Custom Script Configuration & Workflow
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User
+    participant Canvas as SkiaMapperControl
+    participant Analyzer as FunctoidAnalyzer
+    participant Gen as XsltMapGenerator
+    participant Roslyn as Roslyn C# Compiler
+    participant Engine as XslCompiledTransform
 
-**Script Editor Dialog:** Right-clicking any active functoid instance on the canvas and selecting **"Configure Script Block..."** opens the modal script editor, allowing developers to write custom C# logic.
-
-**Method Name Derivation:** The engine uses **Roslyn AST parsing** (CSharpSyntaxTree and MethodDeclarationSyntax) to automatically extract the custom method identifier directly from the user's script body. 
-If a custom script is modified, the functoid's XSLT variable and method binding names update dynamically to match.   
-
-**Visual Modification Indicator:**
-When a functoid's script body differs from its default baseline template (IsScriptCustomized), a crimson indicator badge appears automatically in the top-right corner of the canvas block.Dynamic Parameter & Slot Synchronization: Altering a script re-analyzers input signature counts on-the-fly, automatically pruning obsolete connection wires that exceed the updated parameter threshold.
-
-
-
-## Core Engine Components
-
-1. ***XsltMapGenerator***
-<br>
-The master compilation block that converts graph nodes and wire configurations into standard-compliant XSLT files. It coordinates the data lifecycle through two explicit execution layers:
-
-* **Roslyn AST Signature Stripping:** Scans customized FunctoidInstance scripts using C# syntax nodes. It automatically isolates parameter value defaults (e.g., = 5) to inject into an internal fallback cache, sanitizes parameter data constraints (casting data boundaries from int to double safely for XSLT environments), and re-maps inputs with runtime inline variables to completely avoid data collision boundaries.
-* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins. If a wire mapping gap is intercepted, it queries the fallback parameters lookup block or falls back onto application presets to guarantee stable compilation.
-
-**2.ScriptCompilationEngine**<br>
-An analytical isolation wrapper designed to instantly validate code blocks or evaluate script expressions on-the-fly without requiring full file compilation cycles. 
-Emits byte arrays directly inside application memory using reflection vectors to handle execution targets safely.   
-
-
-## 🧩 Built-In Functoids Catalog template (`BuiltInFunctoids.xml`)
-
-BuiltInFunctoids.xml serves as the extensible configuration template for all pre-built mapping functions (**Functoids**) in the visual palette. Developers can use this template as a base to add new custom functoids or modify existing implementations. It specifies UI categorization, inline C# code-generation formats, and full Roslyn-analyzable implementation scripts.
-
----
-
-### 🎨 Categories & Palette Colors
-
-| Category ID | Category Name | Color | Description |
-| :---: | :--- | :--- | :--- |
-| **1** | `String` | `MediumSeaGreen` | Text manipulation, concatenation, substring, and trim logic. |
-| **2** | `Mathematical` | `DodgerBlue` | Arithmetic operations (addition, multiplication, variadic operations). |
-| **3** | `Logical` | `Orange` | Conditional evaluation and logical comparisons. |
-| **4** | `Date` | `Orchid` | Date parsing, current date generation, age computation, and date math. |
-| **5** | `Conversion` | `Coral` | Type casting and format conversions. |
-| **6** | `Scientific` | `SteelBlue` | Higher-level mathematical and statistical routines. |
-| **7** | `DataBase` | `Goldenrod` | Relational SQL lookups and query-based parameter resolution. |
-
----
-
-### 🔧 Functoid Specifications
-
-#### 🔤 String Functoids (`catId="1"`)
-
-* **Concatenate** (`Id: 100`)
-  * **Code Format:** `string.Concat({0})` (Join Operator: `, `)
-  * **Script:**
-    ```csharp
-    public string Concatenate(params string[] args) {
-        return string.Concat(args);
-    }
-    ```
-* **String Left** (`Id: 110`)
-  * **Code Format:** `{0}.Substring(0, Math.Min({0}.Length, {1}))`
-  * **Script:**
-    ```csharp
-    public string StringLeft(string str, int length) {
-        if (string.IsNullOrEmpty(str)) return string.Empty;
-        return str.Substring(0, Math.Min(str.Length, length));
-    }
-    ```
-* **Trim** (`Id: 120`)
-  * **Code Format:** `{0}?.Trim()`
-  * **Script:**
-    ```csharp
-    public string Trim(string str) {
-        return str?.Trim() ?? string.Empty;
-    }
-    ```
-* **String Constant** (`Id: 130`)
-  * **Code Format:** `"{0}"`
-  * **Script:**
-    ```csharp
-    public string StringConstant(string constantValue) {
-        return constantValue ?? string.Empty;
-    }
-    ```
-
----
-
-#### ➕ Mathematical Functoids (`catId="2"`)
-
-* **Add** (`Id: 200`)
-  * **Code Format:** `({0})` (Join Operator: ` + `)
-  * **Script:**
-    ```csharp
-    public double Add(params double[] values) {
-        double sum = 0;
-        foreach(var v in values) sum += v;
-        return sum;
-    }
-    ```
-* **Multiply** (`Id: 210`)
-  * **Code Format:** `({0},{1})` (Join Operator: ` * `)
-  * **Script:**
-    ```csharp
-    public double Multiply(params double[] values) {
-        if (values.Length == 0) return 0;
-        double result = 1;
-        foreach(var v in values) result *= v;
-        return result;
-    }
-    ```
-
----
-
-#### 📅 Date Functoids (`catId="4"`)
-
-* **Add Days** (`Id: 300`)
-  * **Code Format:** `DateTime.Parse({0}).AddDays({1}).ToString("yyyy-MM-dd")`
-  * **Script:**
-    ```csharp
-    public string AddDays(string dateStr, string daysStr) {
-        if (string.IsNullOrEmpty(dateStr)) return "";
-        if (!double.TryParse(daysStr ?? "0", out double days)) return dateStr;
-        if (DateTime.TryParse(dateStr, out DateTime dt)) {
-            dt = dt.AddDays((int)days);
-            return dt.ToString("yyyy-MM-dd");
-        }
-        return dateStr;
-    }
-    ```
-* **Current Date** (`Id: 310`)
-  * **Code Format:** `DateTime.Now.ToString("yyyy-MM-dd")`
-  * **Script:**
-    ```csharp
-    public string CurrentDate() {
-        return DateTime.Now.ToString("yyyy-MM-dd");
-    }
-    ```
-* **To Age** (`Id: 310`)
-  * **Code Format:** `DateTime.Now.ToString("yyyy-MM-dd")`
-  * **Script:**
-    ```csharp
-    public static int ToAge(DateTime birthDate) {
-        DateTime today = DateTime.Today;
-        if (birthDate > today) {
-            throw new ArgumentOutOfRangeException(nameof(birthDate), "Birthdate cannot be in the future.");
-        }
-        int age = today.Year - birthDate.Year;
-        if (birthDate.Date > today.AddYears(-age)) {
-            age--;
-        }
-        return age;
-    }
-    ```
-
----
-
-#### 🗄️ Database Functoids (`catId="7"`)
-
-* **Database Lookup** (`Id: 700`)
-  * **Code Format:** `DatabaseLookup({0}, {1}, {2}, {3})`
-  * **Script:**
-    ```csharp
-    public string DatabaseLookup(string lookupValue, string connectionString, string tableName, string columnName) {
-        if (string.IsNullOrEmpty(lookupValue) || string.IsNullOrEmpty(connectionString)) return string.Empty;
-        if (string.IsNullOrEmpty(tableName) || string.IsNullOrEmpty(columnName)) return string.Empty;
-        
-        string cleanTable = System.Text.RegularExpressions.Regex.Replace(tableName, @"[^A-Za-z0-9_]", "");
-        string cleanColumn = System.Text.RegularExpressions.Regex.Replace(columnName, @"[^A-Za-z0-9_]", "");
-        string query = $"SELECT [{cleanColumn}] FROM [{cleanTable}] WHERE [Id] = @Param";
-        
-        try {
-            using (var conn = new System.Data.SqlClient.SqlConnection(connectionString))
-            using (var cmd = new System.Data.SqlClient.SqlCommand(query, conn)) {
-                cmd.Parameters.Add(new System.Data.SqlClient.SqlParameter("@Param", lookupValue));
-                conn.Open();
-                var result = cmd.ExecuteScalar();
-                return result != null ? result.ToString() : string.Empty;
-            }
-        }
-        catch (Exception ex) {
-            return string.Empty;
-        }
-    }
-    ```
-
----
-
-### 📐 Configuration XML Schema
-
-When extending or adding custom functoids to `BuiltInFunctoids.xml`, adhere to the following schema structure:
-
-```xml
-<BuiltInFunctoids>
-  <Categories>
-    <Category Color="ColorNameOrHex" Id="1" name="CategoryName"/>
-  </Categories>
-  
-  <Functoid Id="UniqueFunctoidId" catId="CategoryId" name="FunctoidDisplayName">
-    <MethodNameFormat>FormatPatternForCodeGeneration</MethodNameFormat>
-    <JoinOperator>, </JoinOperator> <!-- Optional: Used for variadic params -->
-    <ScriptTemplate>
-      <![CDATA[
-      // C# method implementation analyzed by Roslyn at runtime
-      ]]>
-    </ScriptTemplate>
-  </Functoid>
-</BuiltInFunctoids>
+    User->>Canvas: Click "Execute XSLT Transform"
+    Canvas->>Analyzer: Analyze custom script signatures & slot boundaries
+    Analyzer-->>Canvas: Parameter slot counts & constraints
+    Canvas->>Gen: Pass ActiveFunctoids & Connections topology
+    Gen->>Gen: Trace back-propagation from Destination nodes
+    Gen->>Roslyn: Compile C# Functoid extension code to memory assembly
+    Roslyn-->>Gen: Return compiled extension object instance (`urn:my-scripts`)
+    Gen->>Engine: Load generated XSLT stylesheet & register extension object
+    Engine->>Engine: Transform Source XML payload
+    Engine-->>User: Display output via OutputViewerForm or target file
 ```
-### 1. `XsltMapGenerator`
-The master compilation block that converts graph nodes and wire configurations into standard-compliant XSLT files. It coordinates the data lifecycle through two explicit execution layers:
 
-* **Roslyn AST Signature Stripping:** Scans customized `FunctoidInstance` scripts using C# syntax nodes. It automatically isolates parameter value defaults (e.g., `= 5`) to inject into an internal fallback cache, sanitizes parameter data constraints (casting data boundaries from `int` to `double` safely for XSLT environments), and re-maps inputs with runtime inline variables to completely avoid data collision boundaries.
-* **Backward-Tracing Graph Parser:** Traverses the visual mapping array backward by tracking terminal output lanes down to root source schema origins. If a wire mapping gap is intercepted, it queries the fallback parameters lookup block or falls back onto application presets (e.g., fallback rule maps targeting `StringLeft` length bounds) to guarantee stable compilation.
+## Functoid & Wire Routing Logic
 
-### 2. `ScriptCompilationEngine`
-An analytical isolation wrapper designed to instantly validate code blocks or evaluate script expressions on-the-fly without needing file compilation cycles.
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
 
-* **Dynamic Roslyn Execution Pipeline:** Builds an internal class framework to house code blocks dynamically.
-* **Signature Mapping Layouts:** Converts explicit C# object elements into generic parameters to match expected array signature targets automatically.
-* **Reflection Engine Invocation:** Emits byte arrays directly inside application memory, uses reflection vectors to catch target entry points, and passes down parameters safely to isolate custom transformations while logging validation bugs directly back to user console boxes.
-* ## Data Model Dependencies
+    state "Tree Navigation" as Tree {
+        Idle --> DragSourceNode: MouseDown on Source Node
+        DragSourceNode --> DraggingWire: Move Mouse
+    }
 
-The generation engine processes transformation paths by dynamically tracking data flows and mapping nodes across three core architectural data models:
+    state "Functoid Palette" as PaletteState {
+        Idle --> DragPaletteItem: MouseDown on Functoid Palette Item
+        DragPaletteItem --> DropOnCanvas: Drag into Canvas Bounds
+        DropOnCanvas --> InstantiateFunctoid: Create FunctoidInstance
+    }
 
-* **`FunctoidInstance`:** Represents a functional transformation node on the visual canvas. It encapsulates custom script logic, baseline method metadata templates, input tracking properties, and tracking IDs.
-* **`MappingConnection`:** Represents the physical wire (edge) on the layout canvas connecting data endpoints. It links a definite upstream `Source` item directly to a downstream target execution point.
-* **`ConnectionEndpoint`:** Represents individual socket interface blocks on schemas or functoid edges. It defines structural boundary types (such as source schemas, functoid ports, or destination trees) and stores contextual navigation data paths like `NodePath`.
+    state "Wire Connection Lifecycle" as Wire {
+        DraggingWire --> SnapToFunctoidPort: Hover over Functoid Input
+        DraggingWire --> SnapToDestNode: Hover over Target Node
+        SnapToFunctoidPort --> CreateConnection: MouseUp
+        SnapToDestNode --> CreateConnection: MouseUp
+        CreateConnection --> RedrawCanvas: Invalidate UI State
+    }
+
+    InstantiateFunctoid --> Idle
+    RedrawCanvas --> Idle
+```
+
+## File & Class Structure
+
+| Class / Component | Responsibilities | 
+| ----- | ----- | 
+| **`SkiaMapperControl.cs`** | Main SkiaSharp rendering canvas for dual-tree rendering, floating tool palette, interactive Bezier wire drawing, virtual scrolling, and mouse/keyboard drag-and-drop mechanics. | 
+| **`MainForm.cs`** | Host WinForms container responsible for loading XSD/XML/EDI schema payloads, initializing built-in functoids catalog, and managing project paths. | 
+| **`XsltMapGenerator.cs`** | Compiles canvas connections and active functoids into valid XSLT stylesheets (`xsl:for-each`, `xsl:value-of`, XSLT attributes) and generates Roslyn-compiled dynamic extension instances under `urn:my-scripts`. | 
+| **`FunctoidAnalyzer.cs`** | Uses Roslyn syntax trees to analyze script templates, determining parameter counts, variadic signatures (`params`), and input slot constraints. | 
+| **`RoslynMapExecutor.cs`** | Topological sorting engine and Roslyn C# script evaluator for directly executing in-memory transformations outside of traditional XSLT engines. | 
+
+## Getting Started
+
+### Prerequisites
+
+* **.NET 6.0 SDK** or later
+* Windows OS (due to Windows Forms dependencies)
 
 
-# Data Mapper Workspace User Interface & Interaction Guide
 
+## License
 
----
-## UI Topology & Layout
-![Data Mapper Workspace](mapper2.png)
-The **Data Mapper Workspace** is an interactive, visual data-mapping editor designed to bridge data schemas using nodes, connections, and functional blocks. The workspace structural mechanics and layout model are detailed below.
-
-
-## 1. Visual Layout & Panels
-
-The workspace layout utilizes a three-column panel architecture to define data flow boundaries from source profiles to destination targets.
-
-### Left Panel: Source Profile & Functoid Toolbox
-*   **Source Profile (`s0:SourceProfile`):** A tree layout representing the input document schema structure. 
-    *   Exposes individual root data elements such as `Id`, `BirthDate`, and `PostalCode`.
-    *   Features collapsible structural parent blocks (e.g., the `name` node container), which houses child elements `FirstName` and `LastName`.
-*   **Functoid Toolbox:** Located beneath the source tree, this utility manager holds functional data-processing items:
-    *   **Toolbar Header:** Provides action shortcuts for workspace management: Delete/Trash, Open Folder, and Save.
-    *   **Action Button:** A primary execution trigger labeled **Execute Map Transformation**.
-    *   **Collapsible Categories:** Organizes processing blocks by operations. The `STRING` category displays options like `Concatenate`, `String Left`, `Trim`, and `String Constant`, while the `MATHEMATICAL` category houses nodes like `Add` and `Multiply`.
-
-### Central Panel: Visual Transformation Canvas
-The interactive design workspace where data paths are actively modeled. Components are displayed as floating block components wired together via curved green vector connections.
-
-* **Functoid Blocks:** Individual logical blocks (e.g., String Left, Concatenate) with localized indicators. 
- <br>Modified functions—along with configured properties or custom script attributes—are marked with a red dot indicator in the top-right corner of the block.
-* **Connection Sockets:** Located on the edges of the components:
-  * **Input Sockets (Left Side):** White circular points that ingest raw source elements or outputs from upstream functoids.
-  * **Output Sockets (Right Side):** White circular points that transmit processed data downstream.
-
-### Right Panel: Destination Target
-*   **Destination User Profile (`ns0:DestinationUser`):** A flat schema list representing the desired output schema rules. It acts as the final terminal endpoint zone for the mapping pipeline, containing target elements like `UserId`, `UserId_Plus_1000`, `FullName`, `Age`, `Zip`, and custom computed fields.
-
----
-
-## 2. Interaction Model & Mapping Mechanics
-
-The interface relies on a drag-and-drop link paradigm to establish processing flows.
-
-### Establishing Links
-*   **Source-to-Functoid Mapping:** Users hover over a source leaf node (e.g., `Id`), click and drag a wire vector, and snap it directly onto the left-hand input socket of a target functoid block.
-*   **Functoid-to-Functoid Chaining:** The output socket of a block (such as the `Concatenate` node output) can be dragged and snapped to an input socket of another block (such as the downstream `String Left` node input) to build sequential pipelines.
-*   **Functoid-to-Destination Mapping:** Dragging from a block's right-hand output socket across to a destination schema item (e.g., mapping to `FullName`) anchors the terminal step of the visual graph.
-
-### Pipeline Execution & Flow Tracing
-As illustrated by the active canvas configuration, complex functional operations occur over distinct paths:
-
-1.  **Direct Processing Path (`Id` $\rightarrow$ `UserId`):**
-    *   `Id` connects to the input of a `String Left` functoid.
-    *   The truncated string is piped directly from the functoid output socket straight into the target `UserId` field.
-2.  **Composite Aggregation Path (`FirstName` + `LastName` $\rightarrow$ `FullName`):**
-    *   `FirstName` and `LastName` source points pipe concurrently into separate input slots on a single `Concatenate` block.
-    *   The combined string output routes immediately into a secondary downstream `String Left` node.
-    *   The finalized structural transformation terminates directly in the output field `FullName`.
+This project is open-source and available under the [MIT License](LICENSE).
