@@ -21,18 +21,16 @@
 
 The visual mapper workspace is divided into three core operational zones: the **Source Tree (Left)**, the **Workspace Canvas & Functoid Toolbox (Center)**, and the **Destination Tree (Right)**.
 
-```
-+------------------------+------------------------------------+------------------------+
-|   SOURCE SCHEMA TREE   |     WORKSPACE CANVAS & TOOLBOX     | DESTINATION SCHEMA TREE|
-|                        |                                    |                        |
-|  - Load EDI/XML/XSD    |  - Dynamic Bezier Wires            |  - Target Output Nodes |
-|  - Hierarchical View   |  - Custom C# Script Blocks         |  - Map Target Anchor   |
-|  - Expand / Collapse   |  - Floating Palette & Toolbar      |  - Attribute Mapping   |
-|  - Virtual Scrolling   |  - Output Execution Engine         |  - Virtual Scrolling   |
-+------------------------+------------------------------------+------------------------+
-```
 
-### 1. Source Document Panel (Left - `SourceSchemaControl`)
+
+| SOURCE SCHEMA TREE | WORKSPACE CANVAS & TOOLBOX | DESTINATION SCHEMA TREE |
+| :--- | :--- | :--- |
+| Load EDI/XML/XSD | Dynamic Bezier Wires | Target Output Nodes |
+| Hierarchical View | Custom C# Script Blocks | Map Target Anchor |
+| Expand / Collapse | Floating Palette & Toolbar | Attribute Mapping |
+| Virtual Scrolling | Output Execution Engine | Virtual Scrolling |
+
+### 1. Source Document Panel (Left - `Source Schema Tree`)
 * **Ingestion & Parsing**: Automatically ingests XSD, XML, or flat EDI/X12 files (which are dynamically converted into XML schema structures via `OopFactory.X12`).
 * **Tree View Navigation**: Renders collapsible, hierarchical XML elements, attributes (prefixed with `@`), and EDI loops (e.g., `Loop [N1]`, `Loop [PO1]`).
 * **Parent Drag Routing**: Initiates wire drag by transferring mouse capture to `SkiaMapperControl`, allowing seamless cross-panel drag-and-drop.
@@ -52,7 +50,7 @@ The visual mapper workspace is divided into three core operational zones: the **
   * **Canvas Actions**: Save mapping configuration (`.xslt`), Load existing map, Clear Canvas, or Execute XSLT transformation.
   * **Show Output Checkbox**: Toggles whether the transformation result opens immediately upon compilation.
 
-### 3. Destination Document Panel (Right - `DestinationSchemaControl`)
+### 3. Destination Document Panel (Right - `Destination Schema Tree`)
 * **Schema Target Anchors**: Renders the target XML node tree structure to receive mapping expressions.
 * **Exact Coordinate Translation**: Translates parent mouse events into local control client space via `PointToClient`, resolving target nodes correctly regardless of splitter layout offsets.
 * **Loop & Attribute Binding**: Supports standard element binding, attribute assignment, and context-aware loop structure target bindings.
