@@ -1,5 +1,6 @@
 ﻿using OopFactory.X12.Parsing;
 using OopFactory.X12.Parsing.Model;
+using SkiaMapper.Adapters;
 using SkiaMapper.Forms;
 using SkiaMapper.Models;
 using SkiaSharp;
@@ -8,7 +9,9 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Windows.Forms;
+
 namespace SkiaMapper.Controls {
     public class SourceSchemaControl : SKControl {
         #region Events & Callbacks
@@ -19,6 +22,7 @@ namespace SkiaMapper.Controls {
         // Event raised when the user starts dragging a connection wire from a source tree node
         public event EventHandler<(string NodePath, SKPoint ScreenPoint)>? NodeDragStarted;
         #endregion
+
         #region Fields & Properties
         private SchemaNode? _sourceRoot;
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -50,6 +54,13 @@ namespace SkiaMapper.Controls {
         // Caching rendered node vertical coordinates
         private readonly Dictionary<string, float> _sourceNodeYCache = [];
 
+        // Plugin architecture registry fields
+        private readonly List<ISourceDocumentPlugin> _plugins = new() {
+            new XmlSourcePlugin(),
+            new PdfSourcePlugin()
+        };
+        private ISourceDocumentPlugin? _activePlugin;
+
         // Hit-test rectangles
         private SKRect sourceFileEllipsisRect;
         private SKRect sourceFileViewRect;
@@ -61,6 +72,7 @@ namespace SkiaMapper.Controls {
         private readonly SKFont _headerTitleFont = new(SKTypeface.FromFamilyName("Segoe UI", SKFontStyleWeight.Bold, SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), 11f);
         private SKTypeface? iconTypeface;
         #endregion
+
         public SourceSchemaControl() {
             this.DoubleBuffered = true;
             this.Dock = DockStyle.Fill;
@@ -80,6 +92,7 @@ namespace SkiaMapper.Controls {
                 // Fallback if font resource is missing
             }
         }
+
         public float? GetNodeVisualY(string nodePath) {
             if (string.IsNullOrEmpty(nodePath)) return null;
             if (_sourceNodeYCache.TryGetValue(nodePath, out float contentY)) {
@@ -88,6 +101,7 @@ namespace SkiaMapper.Controls {
             }
             return null;
         }
+
         private void SourceSchemaControl_MouseWheel(object? sender, MouseEventArgs e) {
             float viewableHeight = Height - HeaderHeight;
             if (maxSourceContentHeight <= viewableHeight) {
@@ -103,6 +117,7 @@ namespace SkiaMapper.Controls {
             Invalidate();
             this.Parent?.Invalidate();
         }
+
         protected override void OnPaintSurface(SKPaintSurfaceEventArgs e) {
             base.OnPaintSurface(e);
             _sourceNodeYCache.Clear();
@@ -203,6 +218,7 @@ namespace SkiaMapper.Controls {
                 canvas.DrawRoundRect(new SKRect(trackLeft, thumbTop, trackLeft + scrollbarWidth, thumbTop + thumbHeight), 2.5f, 2.5f, thumbPaint);
             }
         }
+
         private float RenderTreeElement(SKCanvas canvas, SchemaNode node, float currentX, ref float currentY, int currentDepth = 0, string parentPath = "") {
             using var font = new SKFont(SKTypeface.Default, 12f);
             using var textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
@@ -241,6 +257,7 @@ namespace SkiaMapper.Controls {
             }
             return totalBranchHeight;
         }
+
         protected override void OnMouseDown(MouseEventArgs e) {
             base.OnMouseDown(e);
             float viewableHeight = Height - HeaderHeight;
@@ -293,11 +310,12 @@ namespace SkiaMapper.Controls {
                     if (_sourceNodeYCache.TryGetValue(matchedPath, out float contentY)) {
                         float screenY = HeaderHeight + 8f + sourceVirtualScrollY + contentY;
                         NodeDragStarted?.Invoke(this, (matchedPath, new SKPoint(Width, screenY)));
-                       this.Parent.Capture = true;
+                        this.Parent.Capture = true;
                     }
                 }
             }
         }
+
         protected override void OnMouseMove(MouseEventArgs e) {
             base.OnMouseMove(e);
             if (isDraggingSourceScrollbar) {
@@ -305,7 +323,7 @@ namespace SkiaMapper.Controls {
                 float trackHeight = viewableHeight - 8f;
                 float scrollMaxVirtual = maxSourceContentHeight - trackHeight;
                 float deltaY = e.Y - scrollbarDragStartY;
-                float scrollableTrack = trackHeight - 25f; // assuming min thumb height
+                float scrollableTrack = trackHeight - 25f;
                 if (scrollableTrack > 0) {
                     float ratio = scrollMaxVirtual / scrollableTrack;
                     sourceVirtualScrollY = Math.Clamp(scrollbarDragStartScrollY - (deltaY * ratio), -scrollMaxVirtual, 0f);
@@ -313,6 +331,7 @@ namespace SkiaMapper.Controls {
                 }
             }
         }
+
         protected override void OnMouseUp(MouseEventArgs e) {
             base.OnMouseUp(e);
             if (isDraggingSourceScrollbar) {
@@ -320,6 +339,7 @@ namespace SkiaMapper.Controls {
                 Capture = false;
             }
         }
+
         private bool TryToggleNodeExpansion(SchemaNode node, float contentMouseY, float mouseX, float treeLeftX, int currentDepth, ref float currentY) {
             float nodeHeight = 22f;
             float rowHeight = nodeHeight + 4f;
@@ -346,6 +366,7 @@ namespace SkiaMapper.Controls {
             }
             return false;
         }
+
         private static bool FindNodePathAtPosition(SchemaNode node, float mouseY, string parentPath, ref string foundPath) {
             string currentPath = string.IsNullOrEmpty(parentPath) ? node.Name : $"{parentPath}/{node.Name}";
             float halfHeight = (node.LastRenderedHeight > 0 ? node.LastRenderedHeight : 22f) / 2f;
@@ -363,6 +384,7 @@ namespace SkiaMapper.Controls {
             }
             return false;
         }
+
         private void OpenSourceViewer() {
             if (!string.IsNullOrEmpty(_sourcePath) && File.Exists(_sourcePath)) {
                 using var viewerForm = new OutputViewerForm(_sourcePath, "Input schema");
@@ -371,26 +393,42 @@ namespace SkiaMapper.Controls {
                 MessageBox.Show("Source file path is not set or file does not exist.", "File Not Found", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
         }
+
         private void BrowseSourceFile() {
-            using var ofd = new OpenFileDialog { Filter = "Any extension |*.*", Title = "Select Source Schema or EDI File" };
+            string filter = "All Supported Documents (*.xml;*.edi;*.txt;*.pdf)|*.xml;*.edi;*.txt;*.pdf|XML & EDI Files (*.xml;*.edi;*.txt)|*.xml;*.edi;*.txt|PDF Documents (*.pdf)|*.pdf|All Files (*.*)|*.*";
+
+            using var ofd = new OpenFileDialog { Filter = filter, Title = "Select Source Document" };
             if (ofd.ShowDialog() == DialogResult.OK) {
                 string filePath = ofd.FileName;
-                if (Path.GetExtension(filePath).ToLower() is ".edi" or ".txt") {
-                    X12Parser parser = new();
-                    using Stream reader = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-                    var interchanges = parser.ParseMultiple(reader);
-                    string xml = interchanges.First().Serialize();
-                    filePath = Path.ChangeExtension(filePath, ".xml");
-                    File.WriteAllText(filePath, xml);
+
+                if (filePath.EndsWith(".edi", StringComparison.OrdinalIgnoreCase) || filePath.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)) {
+                    try {
+                        X12Parser parser = new();
+                        using Stream reader = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                        var interchanges = parser.ParseMultiple(reader);
+                        string xml = interchanges.First().Serialize();
+                        filePath = Path.ChangeExtension(filePath, ".xml");
+                        File.WriteAllText(filePath, xml);
+                    } catch { }
                 }
 
+                var plugin = _plugins.FirstOrDefault(p => p.CanHandle(filePath));
+                if (plugin == null) {
+                    MessageBox.Show("No suitable plugin found to handle this file format.", "Unsupported File", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Keep MainForm.SourcePath as the actual document file path (.pdf or .xml)
                 _sourcePath = filePath;
+                MainForm.SourcePath = filePath;
+                _activePlugin = plugin;
                 SourcePathChanged?.Invoke(this, filePath);
+
                 try {
-                    _sourceRoot = MainForm.LoadSchemaFromFile(filePath);
+                    _sourceRoot = plugin.ParseSchema(filePath);
                     SourceSchemaReloaded?.Invoke(this, EventArgs.Empty);
                 } catch (Exception ex) {
-                    MessageBox.Show($"Failed to load source schema tree:\n{ex.Message}", "Schema Load Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show($"Failed to load source document via plugin '{plugin.FormatName}':\n{ex.Message}", "Schema Load Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     _sourceRoot = null;
                 }
                 Invalidate();
@@ -398,23 +436,28 @@ namespace SkiaMapper.Controls {
         }
         private void EditSourceSchema() {
             if (!string.IsNullOrEmpty(_sourcePath) && File.Exists(_sourcePath)) {
+                string ext = Path.GetExtension(_sourcePath).ToLower();
+                if (ext == ".pdf") {
+                    MessageBox.Show("Direct source editing is not available for binary PDF documents.", "PDF Source", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
                 string xmlContent = File.ReadAllText(_sourcePath);
                 using var editor = new ScriptEditorDialog(xmlContent, "Source XML Schema");
                 if (editor.ShowDialog() == DialogResult.OK) {
                     File.WriteAllText(_sourcePath, editor.ScriptContent);
-                    _sourceRoot = MainForm.LoadSchemaFromFile(_sourcePath);
+                    var plugin = _plugins.FirstOrDefault(p => p.CanHandle(_sourcePath)) ?? _plugins.First();
+                    _sourceRoot = plugin.ParseSchema(_sourcePath);
                     SourceSchemaReloaded?.Invoke(this, EventArgs.Empty);
                     Invalidate();
                 }
             }
         }
+
         public float? GetNodeWorkspaceY(string nodePath) {
             if (string.IsNullOrEmpty(nodePath)) return null;
 
-            // _sourceNodeYCache stores contentCenterY recorded during RenderTreeElement
             if (_sourceNodeYCache.TryGetValue(nodePath, out float contentY)) {
-                // Must match the exact vertical layout math used in OnPaintSurface:
-                // HeaderHeight (32f) + top padding (8f) + virtual scroll offset + content relative Y
                 return 32f + 8f + sourceVirtualScrollY + contentY;
             }
             return null;

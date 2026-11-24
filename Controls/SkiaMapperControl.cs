@@ -288,16 +288,26 @@ public class SkiaMapperControl : SKControl {
             object extensionInstance = generator.BuildDynamicExtensionObject();
             args.AddExtensionObject("urn:my-scripts", extensionInstance);
 
-            using (var xmlReader = XmlReader.Create(MainForm.SourcePath))
+            // Handle source XML reader dynamically based on whether it's an actual PDF or XML document
+            XmlReader sourceXmlReader;
+            bool isPdf = !string.IsNullOrEmpty(MainForm.SourcePath) && MainForm.SourcePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+
+            if (isPdf) {
+                string pdfXmlContent = SkiaMapper.Adapters.PdfSourcePlugin.GetPdfContentAsXmlString(MainForm.SourcePath);
+                sourceXmlReader = XmlReader.Create(new StringReader(pdfXmlContent));
+            } else {
+                sourceXmlReader = XmlReader.Create(MainForm.SourcePath);
+            }
+
+            using (sourceXmlReader)
             using (var xmlWriter = XmlWriter.Create("POoutput.xml", xslt.OutputSettings)) {
-                xslt.Transform(xmlReader, args, xmlWriter);
+                xslt.Transform(sourceXmlReader, args, xmlWriter);
             }
 
             if (showOutputChecked) {
                 try {
-                    using (var viewerForm = new SkiaMapper.Forms.OutputViewerForm("POoutput.xml", "Transformed output")) {
-                        viewerForm.ShowDialog(this);
-                    }
+                    using var viewerForm = new SkiaMapper.Forms.OutputViewerForm("POoutput.xml", "Transformed output");
+                    viewerForm.ShowDialog(this);
                 } catch (Exception ex) {
                     System.Diagnostics.Debug.WriteLine($"Failed to open output viewer form: {ex.Message}");
                 }
@@ -309,7 +319,7 @@ public class SkiaMapperControl : SKControl {
             AutoFadeMessageBox.Show("Error during xslt transformation, Error copied to clipboard", "failed", 5000);
         }
     }
-
+    //== 311
     private void SkiaMapperControl_MouseWheel(object? sender, MouseEventArgs e) {
         float mainContentHeight = Height - logPanelHeight;
         float centerLeft = leftTreeWidth;

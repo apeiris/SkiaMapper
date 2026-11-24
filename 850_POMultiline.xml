@@ -4,7 +4,7 @@
     <!--Author Information Qualifier-->
     <ISA01>00<!--No Authorization Information Present--></ISA01>
     <!--Author Information-->
-    <ISA02>          </ISA02>
+    <ISA02>  ddddddd        </ISA02>
     <!--Security Information Qualifer-->
     <ISA03>00<!--No Security Information Present--></ISA03>
     <!--Security Information-->
@@ -70,7 +70,7 @@
         <BEG02>SA<!--Stand-alone Order--></BEG02>
         <!--Purchase Order Number-->
         <BEG03>5712201706</BEG03>
-        <BEG04></BEG04>
+        <BEG04>1</BEG04>
         <!--Date-->
         <BEG05>20210624</BEG05>
       </BEG>
@@ -204,6 +204,6 @@
     <!--Number of Included Functional Groups-->
     <IEA01>1</IEA01>
     <!--Interchange Control Number-->
-    <IEA02>850100002</IEA02>
+        <IEA02>850100002</IEA02>
   </IEA>
 </Interchange>

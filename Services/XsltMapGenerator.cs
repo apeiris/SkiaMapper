@@ -150,18 +150,19 @@ namespace SkiaMapper.Services {
             return Activator.CreateInstance(type)!;
         }
 
+
         private string CompileXsltPayload() {
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
 
-          
             if (!string.IsNullOrWhiteSpace(MainForm.SourcePath)) {  // Embed Source and Destination paths into the XSLT header comments for re-hydration
-                sb.AppendLine($"<!-- SourcePath: {MainForm.SourcePath} -->");
+                string safeSource = MainForm.SourcePath.Replace("--", "__");
+                sb.AppendLine($"<!-- SourcePath: {safeSource} -->");
             }
             if (!string.IsNullOrWhiteSpace(MainForm.DestinationPath)) {
-                sb.AppendLine($"<!-- DestinationPath: {MainForm.DestinationPath} -->");
+                string safeDest = MainForm.DestinationPath.Replace("--", "__");
+                sb.AppendLine($"<!-- DestinationPath: {safeDest} -->");
             }
-
 
             sb.AppendLine("<xsl:stylesheet version=\"1.0\" ");
             sb.AppendLine("                xmlns:xsl=\"http://www.w3.org/1999/XSL/Transform\"");
@@ -169,14 +170,8 @@ namespace SkiaMapper.Services {
 
             var discoveredPrefixes = new HashSet<string>();
             foreach (var conn in _connections) {
-                if (conn.Source?.NodePath != null && conn.Source.NodePath.Contains(':')) {
-                    string prefix = conn.Source.NodePath.Split(':')[0];
-                    discoveredPrefixes.Add(prefix);
-                }
-                if (conn.Target?.NodePath != null && conn.Target.NodePath.Contains(':')) {
-                    string prefix = conn.Target.NodePath.Split(':')[0];
-                    discoveredPrefixes.Add(prefix);
-                }
+                AddValidPrefix(conn.Source?.NodePath, discoveredPrefixes);
+                AddValidPrefix(conn.Target?.NodePath, discoveredPrefixes);
             }
 
             foreach (var prefix in discoveredPrefixes) {
@@ -198,7 +193,6 @@ namespace SkiaMapper.Services {
                 string path = connection.Target.NodePath;
                 if (string.IsNullOrEmpty(path)) continue;
 
-                // Inside CompileXsltPayload() in XsltMapGenerator.cs
                 string[] segments = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
                 var currentNode = rootNode;
                 foreach (var rawSegment in segments) {
@@ -253,6 +247,22 @@ namespace SkiaMapper.Services {
 
             return sb.ToString();
         }
+        private void AddValidPrefix(string? nodePath, HashSet<string> prefixes) {
+            if (string.IsNullOrEmpty(nodePath)) return;
+
+            // Ignore drive letters, absolute file paths, or PDF '@Text:' attribute displays
+            if (nodePath.Contains(":\\") || nodePath.Contains(":/") || (nodePath.Length > 1 && nodePath[1] == ':') || nodePath.Contains("@Text:")) {
+                return;
+            }
+
+            if (nodePath.Contains(':')) {
+                string prefix = nodePath.Split(':')[0].Trim();
+                if (prefix.Length > 0 && prefix.All(char.IsLetter)) {
+                    prefixes.Add(prefix);
+                }
+            }
+        }
+
 
         private string GetLoopingFunctoidRawPath(Guid functoidId) {
             var incomingWire = _connections.FirstOrDefault(c =>
@@ -444,32 +454,102 @@ namespace SkiaMapper.Services {
 
         private string ToValidXPath(string rawPath, string? qualifier = null) {
             if (string.IsNullOrEmpty(rawPath)) return string.Empty;
+            Clipboard.Clear();
+            Clipboard.SetText($"rawPath:{rawPath} qualifier:{qualifier}");
 
-            string xpath = rawPath;
-            if (xpath.Contains("Loop [") && xpath.EndsWith("]")) {
-                int startIdx = xpath.IndexOf("[") + 1;
-                int len = xpath.Length - 1 - startIdx;
-                string loopId = xpath.Substring(startIdx, len).Trim();
-                string basePart = xpath.Substring(0, xpath.IndexOf("Loop [")).TrimEnd('/');
-                xpath = $"{basePart}/Loop[@LoopId='{loopId}']";
-            } else {
-                var segments = xpath.Split('/');
-                for (int i = 0; i < segments.Length; i++) {
-                    if (segments[i].Contains(" [") && segments[i].EndsWith("]")) {
-                        segments[i] = segments[i].Replace(" [", "[@LoopId='").Replace("]", "']");
-                    } else {
-                        segments[i] = segments[i].Replace(" ", "_");
+            // Handle PDF content nodes formatted as '@Text: [value]' or spatial blocks
+            if (rawPath.Contains("@Text:")) {
+                int textIdx = rawPath.IndexOf("@Text:");
+                if (textIdx >= 0) {
+                    string basePath = rawPath.Substring(0, textIdx).TrimEnd('/', ' ');
+                    string textValue = rawPath.Substring(textIdx + 6).Trim();
+
+                    // Remove the filename prefix if present (e.g. "PO4.pdf/")
+                    int slashIdx = basePath.IndexOf('/');
+                    if (slashIdx >= 0 && basePath.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) == false) {
+                        string firstSeg = basePath.Substring(0, slashIdx);
+                        if (firstSeg.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) {
+                            basePath = basePath.Substring(slashIdx + 1);
+                        }
                     }
+
+                    string escapedText = textValue.Replace("'", "&apos;");
+
+                    var segments = basePath.Split('/');
+                    var convertedSegments = new List<string>();
+                    foreach (var seg in segments) {
+                        string trimmed = seg.Trim();
+                        if (string.IsNullOrEmpty(trimmed) || trimmed.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        // Skip trailing "Block" segment since we append it explicitly below
+                        if (trimmed.Equals("Block", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        if (trimmed.Equals("Document Content", StringComparison.OrdinalIgnoreCase)) {
+                            convertedSegments.Add("DocumentContent");
+                        } else if (trimmed.StartsWith("Page ")) {
+                            string pageNum = trimmed.Substring(5);
+                            convertedSegments.Add($"Page[@Number='{pageNum}']");
+                        } else if (trimmed.Contains("Loop [")) {
+                            // Extract LoopId safely from strings like "Loop [PO1] (Seq: 1)"
+                            int startIdx = trimmed.IndexOf("[") + 1;
+                            int endIdx = trimmed.IndexOf("]", startIdx);
+                            if (startIdx > 0 && endIdx > startIdx) {
+                                string loopId = trimmed.Substring(startIdx, endIdx - startIdx).Trim();
+                                convertedSegments.Add($"Loop[@LoopId='{loopId}']");
+                            } else {
+                                convertedSegments.Add(trimmed.Replace(" ", "_"));
+                            }
+                        } else {
+                            convertedSegments.Add(trimmed.Replace(" ", "_"));
+                        }
+                    }
+
+                    string fullBasePath = string.Join("/", convertedSegments);
+
+                    // Ensure root element 'PdfDocument' is included
+                    if (!fullBasePath.StartsWith("PdfDocument", StringComparison.OrdinalIgnoreCase)) {
+                        fullBasePath = "PdfDocument/" + fullBasePath;
+                    }
+
+                    string xpathExpr = $"{fullBasePath}/Block[Text='{escapedText}']/Text";
+
+                    Clipboard.SetText($"xpath:{xpathExpr}");
+                    return xpathExpr;
                 }
-                xpath = string.Join("/", segments);
             }
 
-            // Automatically inject the N101 qualifier predicate if an active qualifier is detected
+            // Standard path conversion logic for schema mapping tree
+            string xpath = rawPath;
+            var pathSegments = xpath.Split('/');
+            for (int i = 0; i < pathSegments.Length; i++) {
+                string seg = pathSegments[i].Trim();
+                if (seg.Contains("Loop [")) {
+                    int startIdx = seg.IndexOf("[") + 1;
+                    int endIdx = seg.IndexOf("]", startIdx);
+                    if (startIdx > 0 && endIdx > startIdx) {
+                        string loopId = seg.Substring(startIdx, endIdx - startIdx).Trim();
+                        pathSegments[i] = $"Loop[@LoopId='{loopId}']";
+                    }
+                } else if (seg.Contains(" [") && seg.EndsWith("]")) {
+                    pathSegments[i] = seg.Replace(" [", "[@LoopId='").Replace("]", "']");
+                } else if (seg.Equals("Document Content", StringComparison.OrdinalIgnoreCase)) {
+                    pathSegments[i] = "DocumentContent";
+                } else if (seg.StartsWith("Page ")) {
+                    string pageNum = seg.Substring(5);
+                    pathSegments[i] = $"Page[@Number='{pageNum}']";
+                } else {
+                    pathSegments[i] = seg.Replace(" ", "_");
+                }
+            }
+            xpath = string.Join("/", pathSegments);
+
             if (!string.IsNullOrEmpty(qualifier) && xpath.Contains("Loop[@LoopId='N1']") && !xpath.Contains("N101=")) {
                 xpath = xpath.Replace("Loop[@LoopId='N1']", $"Loop[@LoopId='N1'][N1/N101='{qualifier}']");
             }
 
+            Clipboard.SetText($"xpath:{xpath!}");
             return xpath;
         }
+        //509,514,524,529,530,532,535,553
     }
 }

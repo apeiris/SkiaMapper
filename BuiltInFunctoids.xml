@@ -298,4 +298,45 @@ public string GetBillToByIsa06(string isa05, string isa06) {
       ]]>
 		</ScriptTemplate>
 	</Functoid>
+<Functoid name="DelimitedStringToXml" catId="8" Id="841">
+    <MethodNameFormat>DelimitedStringToXml({0}, {1}, {2})</MethodNameFormat>
+    <ScriptTemplate>
+        <![CDATA[
+        public string DelimitedStringToXml(string inputString, string delimiter = ",", string rootElementName = "Address") {
+            if (string.IsNullOrWhiteSpace(inputString)) {
+                return string.Empty;
+            }
+
+            string actualDelimiter = string.IsNullOrEmpty(delimiter) ? "," : delimiter;
+            
+            // Use explicit new string[] instead of implicit new[] to satisfy strict Roslyn compilation
+            var tokens = inputString.Split(new string[] { actualDelimiter }, StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(t => t.Trim())
+                                    .ToArray();
+
+            string FormatElement(string tag, string val) =>
+                string.IsNullOrWhiteSpace(val) ? string.Empty : $"<{tag}>{System.Net.WebUtility.HtmlEncode(val)}</{tag}>";
+
+            string street = tokens.Length > 0 ? tokens[0] : string.Empty;
+            string city = tokens.Length > 1 ? tokens[1] : string.Empty;
+            string state = tokens.Length > 2 ? tokens[2] : string.Empty;
+            string postal = tokens.Length > 3 ? tokens[3] : string.Empty;
+            string country = tokens.Length > 4 ? tokens[4] : string.Empty;
+
+            string innerXml = FormatElement("Address1", street) +
+                              FormatElement("City", city) +
+                              FormatElement("StateOrProvince", state) +
+                              FormatElement("PostalCode", postal) +
+                              FormatElement("CountryCode", country);
+
+            if (string.IsNullOrEmpty(innerXml)) {
+                return string.Empty;
+            }
+
+            string safeRoot = System.Xml.XmlConvert.EncodeLocalName(rootElementName);
+            return $"<{safeRoot}>{innerXml}</{safeRoot}>";
+        }
+        ]]>
+    </ScriptTemplate>
+</Functoid>
 </BuiltInFunctoids>
